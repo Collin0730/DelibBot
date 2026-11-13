@@ -2,13 +2,20 @@
 
 A clickable demo of the Deliberation Partner, an AI coach for participants in citizens' assemblies, using the Climate Assembly UK materials as the example.
 
-The demo walks through the full participant experience:
+The site has two pages, linked by a small bar in the bottom-right corner.
+
+**Participant experience** (`index.html`)
 
 1. **Materials**: upload a folder (or use the demo set), build the partner, and see the evaluation health check.
-2. **Prepare**: a private chat with the partner before the session, with sourced answers.
+2. **Prepare**: a quick "where do you stand?" pre-survey, then a private chat with the partner, with sourced answers.
 3. **Discuss**: a simulated group discussion with three members and a facilitator, viewable as **Chat only**, **Chat and map**, or **Chat and flow**, with the partner's private check-ins throughout.
+4. **Reflect**: a post-deliberation questionnaire. Before and after views per topic (telling apart reinforced, unmoved, and less certain), what moved you and what didn't (picked from the actual points made), plus the discussion process, the AI partner, and follow-ups.
 
-Everything is simulated in the browser: there is no backend, no API key, and no data leaves the page. Partner answers and the discussion use real figures and speaker names from the Climate Assembly UK materials. Uploaded files are only listed by name; their contents are never read or sent anywhere.
+**Organiser review** (`admin.html`)
+
+Simulated responses from one breakout room. For each topic: opinion change before and after, the most and least persuasive points, and each participant's answers alongside what they said. Every point has "Open in discussion", which opens the transcript at that moment. Tabs for process, the AI partner (including any reports of steering), and follow-ups, plus a Names / Pseudonyms toggle.
+
+Everything is simulated in the browser: there is no backend, no API key, and no data leaves the page. Partner answers and the discussion use real figures and speaker names from the Climate Assembly UK materials. Uploaded files are only listed by name; their contents are never read or sent anywhere. Questionnaire answers stay in the page and are not saved.
 
 ## Run it locally
 
@@ -41,8 +48,10 @@ npx vercel --prod   # production
 
 ```
 public/
-  index.html       page shell, styles, and the page markup inside <template id="dc-template">
-  app.js           the demo's logic: state, scripted content, evaluation metrics, partner behaviour
+  index.html       participant experience: page shell, styles, markup inside <template id="dc-template">
+  app.js           its logic: state, scripted content, evaluation metrics, partner behaviour, questionnaire
+  admin.html       organiser review page
+  admin.js         its logic and the simulated responses
   dc-runtime.js    small renderer that fills the template from app.js (about 120 lines)
   vendor/preact.mjs  Preact 10 (MIT licence in vendor/PREACT-LICENSE.txt), bundled so nothing loads from a CDN
 tools/
@@ -57,10 +66,10 @@ The only external request is Google Fonts (Inter and Space Grotesk). Remove the 
 
 ## Updating the demo
 
-The demo was designed on a Design canvas. To regenerate the site from an updated artboard file:
+The demo was designed on a Design canvas. To regenerate the site from updated artboard files:
 
 ```powershell
-py tools/build_from_canvas.py path\to\FullUX.dc.html
+py tools/build_from_canvas.py path\to\FullUX.dc.html path\to\AdminReview.dc.html
 ```
 
-Small changes can also be made directly in `public/app.js` (logic and text) and `public/index.html` (layout).
+Small changes can also be made directly in `public/app.js` / `public/admin.js` (logic and text) and the matching `.html` files (layout).

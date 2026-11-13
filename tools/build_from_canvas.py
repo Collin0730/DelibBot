@@ -1,10 +1,11 @@
-"""Convert a Design canvas artboard (.dc.html) into this static site.
+"""Convert Design canvas artboards (.dc.html) into this static site.
 
 Usage:
-    python tools/build_from_canvas.py path/to/FullUX.dc.html
+    python tools/build_from_canvas.py FullUX.dc.html [AdminReview.dc.html]
 
-Writes public/index.html and public/app.js. Rerun it whenever the canvas
-version of the mock changes.
+The first artboard becomes public/index.html (+ app.js), the participant
+experience. The optional second becomes public/admin.html (+ admin.js), the
+organiser review. Rerun whenever the canvas version of the mock changes.
 """
 
 from __future__ import annotations
@@ -28,6 +29,10 @@ INDEX = """<!doctype html>
 __HEAD__
 <style>
 html,body{margin:0}
+.demo-nav{position:fixed;right:16px;bottom:16px;z-index:30;display:flex;gap:4px;padding:4px;border-radius:12px;background:#1B1F24;box-shadow:0 6px 20px rgba(0,0,0,.18);font-family:Inter,system-ui,sans-serif;font-size:13px}
+.demo-nav a{color:#FFFFFF;text-decoration:none;padding:8px 12px;border-radius:8px;min-height:20px}
+.demo-nav a[aria-current="page"]{background:#FFFFFF;color:#1B1F24;font-weight:600}
+.demo-nav a:focus-visible{outline:3px solid #8FB4D9;outline-offset:2px}
 #app-error{display:none;max-width:640px;margin:40px auto;padding:16px 20px;border:1px solid #E3B4AE;border-radius:10px;background:#FBEBE9;color:#6B1F17;font-family:system-ui,sans-serif}
 </style>
 </head>
@@ -35,12 +40,13 @@ html,body{margin:0}
 <div id="app"></div>
 <div id="app-error" role="alert"></div>
 <noscript><p style="font-family:system-ui,sans-serif;max-width:640px;margin:40px auto">This demo needs JavaScript enabled.</p></noscript>
+__NAV__
 <template id="dc-template">
 __TEMPLATE__
 </template>
 <script type="module">
 import { mount } from './dc-runtime.js';
-mount({ templateId: 'dc-template', appSrc: './app.js', target: document.getElementById('app'), props: __PROPS__ })
+mount({ templateId: 'dc-template', appSrc: './__APPJS__', target: document.getElementById('app'), props: __PROPS__ })
   .catch((err) => {
     const box = document.getElementById('app-error');
     box.textContent = 'The demo failed to start: ' + err.message;
@@ -53,7 +59,20 @@ mount({ templateId: 'dc-template', appSrc: './app.js', target: document.getEleme
 """
 
 
-def main(src: str) -> None:
+PAGES = [("index.html", "app.js", "Participant experience"), ("admin.html", "admin.js", "Organiser review")]
+
+
+def nav_html(current: str, count: int) -> str:
+    if count < 2:
+        return ""
+    links = []
+    for page, _, label in PAGES[:count]:
+        cur = ' aria-current="page"' if page == current else ""
+        links.append(f'<a href="{page}"{cur}>{label}</a>')
+    return '<nav class="demo-nav" aria-label="Demo pages">' + "".join(links) + "</nav>"
+
+
+def build_page(src: str, page: str, appjs: str, count: int) -> None:
     html = Path(src).read_text(encoding="utf-8")
     title = re.search(r"<title>(.*?)</title>", html, re.S).group(1).strip()
     xdc = re.search(r"<x-dc>(.*)</x-dc>", html, re.S).group(1)
@@ -67,26 +86,33 @@ def main(src: str) -> None:
     props = {k: v["default"] for k, v in props_spec.items() if not k.startswith("$") and isinstance(v, dict) and "default" in v}
 
     if "</template>" in template:
-        raise SystemExit("The markup contains </template>, which would break the page.")
+        raise SystemExit(f"{src}: the markup contains </template>, which would break the page.")
 
     index = (
         INDEX.replace("__TITLE__", title)
         .replace("__HEAD__", head)
+        .replace("__NAV__", nav_html(page, count))
         .replace("__TEMPLATE__", template)
+        .replace("__APPJS__", appjs)
         .replace("__PROPS__", json.dumps(props))
     )
     PUBLIC.mkdir(parents=True, exist_ok=True)
-    (PUBLIC / "index.html").write_text(index, encoding="utf-8")
-    (PUBLIC / "app.js").write_text(
+    (PUBLIC / page).write_text(index, encoding="utf-8")
+    (PUBLIC / appjs).write_text(
         "// Generated from the Design canvas by tools/build_from_canvas.py. Edit the canvas, then rebuild.\n"
         + logic
         + "\n\nwindow.__DCComponent = Component;\n",
         encoding="utf-8",
     )
-    print(f"Wrote {PUBLIC / 'index.html'} and {PUBLIC / 'app.js'} (props: {props})")
+    print(f"Wrote {page} and {appjs} from {Path(src).name} (props: {props})")
+
+
+def main(sources: list[str]) -> None:
+    if not 1 <= len(sources) <= len(PAGES):
+        raise SystemExit(__doc__)
+    for src, (page, appjs, _) in zip(sources, PAGES):
+        build_page(src, page, appjs, len(sources))
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        raise SystemExit(__doc__)
-    main(sys.argv[1])
+    main(sys.argv[1:])

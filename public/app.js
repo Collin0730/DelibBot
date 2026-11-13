@@ -72,6 +72,70 @@ const OPTIONS = [
 ];
 const STANCES = ['Against', 'Leaning against', 'Unsure', 'Leaning for', 'For'];
 const MAP_TO_ROW = { levy: 'A', tech: 'B', alt: 'C' };
+// ---------- Pre-survey and reflection ----------
+const PRE_TOPICS = [
+  { id: 'A', title: 'A frequent flyer levy' },
+  { id: 'B', title: 'Cleaner engines and sustainable fuels' },
+  { id: 'C', title: 'Alternatives to flying: rail, ferry, video calls' }
+];
+const REFL_TOPICS = [
+  { id: 'A', title: 'Frequent flyer levy' },
+  { id: 'B', title: 'Cleaner engines and sustainable fuels' },
+  { id: 'C', title: 'Alternatives: rail, ferry, video calls' },
+  { id: 'D', title: 'Combining options', duringOnly: true }
+];
+const NO_VIEW = 'No view yet';
+const VIEW_CHOICES = [NO_VIEW, 'Against', 'Leaning against', 'Unsure', 'Leaning for', 'For'];
+const CERTAINTY = ['More sure', 'About the same', 'Less sure'];
+const AGREE5 = ['Not at all', 'A little', 'Somewhat', 'Mostly', 'Completely'];
+const PUSHED = ['No', 'Once or twice', 'Often', 'Not sure'];
+const USED = ['Preparation chat', 'Whispers in the chat', 'Map view', 'Flow view', 'Starter drafts', 'Points list'];
+const UPDATES = ["The assembly's final recommendations", 'Answers to my open questions', 'Future sessions'];
+const CONTACT = ['Email', 'Text message', "Don't contact me"];
+const SAMPLE_PRE = { A: 'Leaning against', B: 'Leaning for', C: 'Leaning for' };
+
+function blankReflection() {
+  const topics = {};
+  REFL_TOPICS.forEach(t => { topics[t.id] = { now: '', certainty: '', moved: [], notp: [], movedNote: '', notNote: '' }; });
+  return { topics: topics, heard: '', fair: '', wanted: '', issues: '', helpful: '', pushed: '', pushedWhen: '', used: [], openQs: [], otherQs: '', updates: [], contact: '' };
+}
+
+// How a view changed, in the participant's own answers.
+function changeOf(topic, before, now, certainty) {
+  if (!now) return { label: 'Not answered yet', tone: 'gray' };
+  if (topic.duringOnly) return { label: 'New in the discussion', tone: 'blue' };
+  if (!before) return { label: 'No starting view recorded', tone: 'gray' };
+  const b = STANCES.indexOf(before), n = STANCES.indexOf(now);
+  if (b < 0 && n >= 0) return { label: 'Formed a view', tone: 'blue' };
+  if (b >= 0 && n < 0) return { label: 'Now undecided', tone: 'amber' };
+  if (b < 0 && n < 0) return { label: 'Still no view', tone: 'gray' };
+  if (n > b) return { label: 'Moved toward For' + (n - b > 1 ? ' (+' + (n - b) + ')' : ''), tone: 'purple' };
+  if (n < b) return { label: 'Moved toward Against' + (b - n > 1 ? ' (' + (n - b) + ')' : ''), tone: 'purple' };
+  if (certainty === 'More sure') return { label: 'Reinforced', tone: 'green' };
+  if (certainty === 'Less sure') return { label: 'Less certain', tone: 'amber' };
+  if (certainty === 'About the same') return { label: 'Unmoved', tone: 'gray' };
+  return { label: 'Same view', tone: 'gray' };
+}
+const TONES = {
+  gray: ['#ECEEF1', '#3D4651'], blue: ['#E8F0F8', '#1F4E79'], green: ['#E4F1E8', '#24543D'],
+  amber: ['#FDF3E4', '#6B4310'], purple: ['#EEE9F6', '#5B3F8C']
+};
+function badgeStyle(tone) {
+  const c = TONES[tone] || TONES.gray;
+  return 'display: inline-block; font-size: 12px; font-weight: 600; padding: 3px 10px; border-radius: 99px; background: ' + c[0] + '; color: ' + c[1];
+}
+function chipStyle(on, palette) {
+  const p = palette === 'amber' ? ['#5E3410', '#D9C29E'] : ['#1F5A8C', '#C9CBC4'];
+  return 'min-height: 36px; padding: 0 12px; border-radius: 99px; font: inherit; font-size: 13px; cursor: pointer; border: 1px solid ' + (on ? p[0] : p[1]) + '; background: ' + (on ? p[0] : '#FFFFFF') + '; color: ' + (on ? '#FFFFFF' : '#1B1F24');
+}
+function pointStyle(on, kind) {
+  const c = kind === 'not' ? ['#8A4B0F', '#FBEBDD'] : kind === 'q' ? ['#1F5A8C', '#E8F0F8'] : ['#24543D', '#E4F1E8'];
+  return {
+    style: 'display: flex; gap: 10px; align-items: flex-start; text-align: left; width: 100%; min-height: 40px; padding: 8px 10px; border-radius: 8px; font: inherit; font-size: 13px; line-height: 1.4; cursor: pointer; color: #1B1F24; border: 1px solid ' + (on ? c[0] : '#E2E2DC') + '; background: ' + (on ? c[1] : '#FFFFFF'),
+    boxStyle: 'flex: 0 0 auto; margin-top: 1px; width: 16px; height: 16px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; border: 1.5px solid ' + (on ? c[0] : '#8A8F96') + '; background: ' + (on ? c[0] : '#FFFFFF')
+  };
+}
+
 
 // Debate-style flow: columns are people, rows are topics (options, then numbered sub-points).
 const FLOW_COLS = ['river', 'priya', 'gary', 'okafor', 'you'];
@@ -225,7 +289,8 @@ class Component extends DCLogic {
       feed: [], scriptPos: 0, pendingAck: false, playing: true, mode: 'auto', speed: props.defaultSpeed || 4,
       userPosted: false, discussDraft: '', nudges: [], flags: {}, concern: null, stance: null, draft: '',
       evalRunning: false, evalProgress: 0, evalDone: false,
-      view: 'chat', whispers: true, stances: {}, flagged: {}, points: [], pointDraft: '', draftFromPartner: false, userEntries: []
+      view: 'chat', whispers: true, stances: {}, flagged: {}, points: [], pointDraft: '', draftFromPartner: false, userEntries: [],
+      pre: {}, preStatus: 'open', preSample: false, refl: blankReflection(), reflSubmitted: false
     }, this.screenState(props.startScreen || 'upload', null));
   }
 
@@ -251,12 +316,43 @@ class Component extends DCLogic {
       Object.assign(out, { files: this.demoFiles(), corpusName: 'Climate Assembly UK demo set', demo: true, indexed: true, indexing: false, progress: 100, evalRunning: false, evalProgress: 100, evalDone: true });
     }
     if (screen === 'discuss' && !(s && s.feed && s.feed.length)) Object.assign(out, this.freshDiscussion());
+    if (screen === 'reflect' && !(s && s.feed && s.feed.length)) {
+      Object.assign(out, this.freshDiscussion(), { feed: SCRIPT.slice(), scriptPos: SCRIPT.length, playing: false });
+      const noPre = !s || (s.preStatus !== 'saved' && !Object.keys(s.pre || {}).some(k => s.pre[k]));
+      if (noPre) Object.assign(out, { pre: Object.assign({}, SAMPLE_PRE), preStatus: 'saved', preSample: true });
+    }
     return out;
   }
   freshDiscussion() {
     return { feed: [SCRIPT[0]], scriptPos: 1, pendingAck: false, playing: true, nudges: [], flags: {}, userPosted: false, concern: null, stance: null, draft: '', discussDraft: '', stances: {}, flagged: {}, points: [], pointDraft: '', draftFromPartner: false, userEntries: [] };
   }
   goTo(screen) { this.clearTimer(); this.setState(this.screenState(screen, this.state)); }
+
+  // ---------- pre-survey and reflection ----------
+  setPre(id, v) { const pre = Object.assign({}, this.state.pre); pre[id] = pre[id] === v ? undefined : v; this.setState({ pre: pre, preSample: false }); }
+  setRefl(key, v) { this.setState({ refl: Object.assign({}, this.state.refl, { [key]: v }) }); }
+  toggleRefl(key, v) {
+    const cur = this.state.refl[key].slice();
+    const i = cur.indexOf(v);
+    if (i >= 0) cur.splice(i, 1); else cur.push(v);
+    this.setRefl(key, cur);
+  }
+  setTopic(id, key, v) {
+    const r = this.state.refl;
+    const t = Object.assign({}, r.topics[id], { [key]: v });
+    this.setState({ refl: Object.assign({}, r, { topics: Object.assign({}, r.topics, { [id]: t }) }) });
+  }
+  togglePoint(id, list, pid) {
+    const r = this.state.refl;
+    const t = Object.assign({}, r.topics[id]);
+    const other = list === 'moved' ? 'notp' : 'moved';
+    const cur = t[list].slice();
+    const i = cur.indexOf(pid);
+    if (i >= 0) cur.splice(i, 1);
+    else { cur.push(pid); t[other] = t[other].filter(x => x !== pid); }
+    t[list] = cur;
+    this.setState({ refl: Object.assign({}, r, { topics: Object.assign({}, r.topics, { [id]: t }) }) });
+  }
 
   // ---------- materials ----------
   onFolder(e) {
@@ -415,12 +511,12 @@ class Component extends DCLogic {
   renderVals() {
     const s = this.state;
     const accent = this.props.accent || '#1F5A8C';
-    const order = ['upload', 'prep', 'discuss'];
+    const order = ['upload', 'prep', 'discuss', 'reflect'];
     const cur = order.indexOf(s.screen);
-    const labels = { upload: 'Materials', prep: 'Prepare', discuss: 'Discuss' };
+    const labels = { upload: 'Materials', prep: 'Prepare', discuss: 'Discuss', reflect: 'Reflect' };
     const steps = order.map((k, i) => {
-      const state = i === cur ? 'current' : (i < cur || (k === 'prep' && s.indexed) ? 'done' : 'todo');
-      const locked = state === 'todo' && !(k === 'discuss' && s.indexed);
+      const state = i === cur ? 'current' : (i < cur || (k === 'prep' && s.indexed) || (k === 'discuss' && s.feed.length > 0) || (k === 'reflect' && s.reflSubmitted) ? 'done' : 'todo');
+      const locked = state === 'todo' && !(k === 'discuss' && s.indexed) && !(k === 'reflect' && s.feed.length > 0);
       return {
         n: i + 1, label: labels[k], locked: locked, ariaCurrent: state === 'current' ? 'step' : 'false',
         go: () => this.goTo(k),
@@ -553,6 +649,68 @@ class Component extends DCLogic {
     });
     const addPoint = () => { const t = (this.state.pointDraft || '').trim(); if (!t) return; this.setState({ points: this.state.points.concat([t]), pointDraft: '' }); };
 
+    // ---- pre-survey ----
+    const preRows = PRE_TOPICS.map(t => ({
+      num: t.id, title: t.title,
+      chips: VIEW_CHOICES.map(v => ({ label: v, pressed: s.pre[t.id] === v ? 'true' : 'false', pick: () => this.setPre(t.id, v), style: chipStyle(s.pre[t.id] === v) }))
+    }));
+    const preAnswered = PRE_TOPICS.filter(t => s.pre[t.id]).length;
+    const preSummary = s.preStatus === 'skipped'
+      ? 'You skipped the starting snapshot. You can still add it before the discussion.'
+      : 'Starting views saved' + (s.preSample ? ' (sample answers, because you skipped ahead)' : '') + ': ' + PRE_TOPICS.map(t => t.id + ' ' + (s.pre[t.id] || 'not answered')).join(' · ');
+
+    // ---- reflection ----
+    const rf = s.refl;
+    const shownEntries = FLOW_ENTRIES.map((e, i) => Object.assign({ id: 'e' + i }, e))
+      .filter(e => e.at < s.scriptPos && e.who !== 'you' && e.row !== 'F' && e.row !== 'N');
+    const reflTopics = REFL_TOPICS.map(t => {
+      const a = rf.topics[t.id];
+      const before = t.duringOnly ? '' : (s.pre[t.id] || '');
+      const ch = changeOf(t, before, a.now, a.certainty);
+      const pts = shownEntries.filter(e => e.row.charAt(0) === t.id);
+      const mk = (list, kind) => pts.map(e => {
+        const on = a[list].indexOf(e.id) >= 0;
+        const ps = pointStyle(on, kind);
+        return { who: PEOPLE[e.who].name + ':', text: e.text, on: on, pressed: on ? 'true' : 'false', toggle: () => this.togglePoint(t.id, list, e.id), style: ps.style, boxStyle: ps.boxStyle };
+      });
+      return {
+        num: t.id, title: t.title, change: ch.label, badgeStyle: badgeStyle(ch.tone),
+        before: t.duringOnly ? 'Came up during the discussion' : (before || 'Not recorded'),
+        nowLabel: a.now ? (a.now === NO_VIEW ? 'No view' : a.now) : 'Not answered',
+        hasDuring: !!s.stances[t.id], during: s.stances[t.id] || '',
+        nowChips: VIEW_CHOICES.map(v => ({ label: v === NO_VIEW ? 'No view' : v, pressed: a.now === v ? 'true' : 'false', pick: () => this.setTopic(t.id, 'now', a.now === v ? '' : v), style: chipStyle(a.now === v) })),
+        askCertainty: !!before && before !== NO_VIEW && a.now === before,
+        certChips: CERTAINTY.map(v => ({ label: v, pressed: a.certainty === v ? 'true' : 'false', pick: () => this.setTopic(t.id, 'certainty', a.certainty === v ? '' : v), style: chipStyle(a.certainty === v) })),
+        hasPoints: pts.length > 0, noPoints: pts.length === 0,
+        movedPoints: mk('moved', 'moved'), notPoints: mk('notp', 'not'),
+        movedNote: a.movedNote, notNote: a.notNote,
+        onMovedNote: (e) => this.setTopic(t.id, 'movedNote', e.target.value),
+        onNotNote: (e) => this.setTopic(t.id, 'notNote', e.target.value)
+      };
+    });
+    const scale = (label, key, options, palette) => ({ label: label, chips: options.map(v => ({ label: v, pressed: rf[key] === v ? 'true' : 'false', pick: () => this.setRefl(key, rf[key] === v ? '' : v), style: chipStyle(rf[key] === v, palette) })) });
+    const multi = (key, options, palette) => options.map(v => { const on = rf[key].indexOf(v) >= 0; return { label: v, pressed: on ? 'true' : 'false', pick: () => this.toggleRefl(key, v), style: chipStyle(on, palette) }; });
+    const uniqueQs = s.questions.filter((q, i) => s.questions.indexOf(q) === i);
+    const openQItems = uniqueQs.map(q => { const on = rf.openQs.indexOf(q) >= 0; const ps = pointStyle(on, 'q'); return { text: q, on: on, pressed: on ? 'true' : 'false', toggle: () => this.toggleRefl('openQs', q), style: ps.style, boxStyle: ps.boxStyle }; });
+    const doneFlags = [
+      REFL_TOPICS.every(t => rf.topics[t.id].now),
+      !!(rf.heard && rf.fair),
+      !!(rf.helpful && rf.pushed),
+      !!rf.contact
+    ];
+    const sectionLabels = ['Your views', 'The discussion itself', 'Your partner', 'Follow-ups'];
+    const sectionHrefs = ['#reflect-views', '#reflect-process', '#reflect-partner', '#reflect-followups'];
+    const doneCount = doneFlags.filter(Boolean).length;
+    const reflSections = sectionLabels.map((label, i) => ({
+      label: label, href: sectionHrefs[i], mark: doneFlags[i] ? '✓' : String(i + 1),
+      dotStyle: 'flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; ' + (doneFlags[i] ? 'background: #2F6B4F; color: #FFFFFF' : 'background: #ECECE7; color: #3D4651')
+    }));
+    const wantsContact = rf.contact && rf.contact !== "Don't contact me";
+    const followupNote = !rf.contact ? "You didn't choose how to be contacted, so the organisers won't follow up."
+      : !wantsContact ? 'You chose not to be contacted.'
+      : rf.updates.length ? 'The organisers will contact you by ' + rf.contact.toLowerCase() + ' about: ' + rf.updates.join('; ') + '.'
+      : 'You chose ' + rf.contact.toLowerCase() + ' but no updates, so the organisers will only contact you if needed.';
+
     // ---- evaluation health ----
     const scored = EVAL_METRICS.map(m => Object.assign({}, m, { att: attainment(m) }));
     const health = Math.round(100 * scored.reduce((a, m) => a + m.att, 0) / scored.length);
@@ -619,6 +777,28 @@ class Component extends DCLogic {
     const tagLegend = ['Raises', 'Supports', 'Challenges', 'Responds', 'Asks', 'Summarises'].map(t => ({ label: t, style: tagStyle(t).replace('align-self: flex-start; ', '') }));
 
     return {
+      isReflect: s.screen === 'reflect', toReflect: () => this.goTo('reflect'),
+      preRows: preRows, preOpen: s.preStatus === 'open', preDone: s.preStatus !== 'open',
+      preIncomplete: preAnswered < PRE_TOPICS.length, preProgress: preAnswered + ' of ' + PRE_TOPICS.length + ' answered',
+      preSaveStyle: 'min-height: 40px; padding: 0 16px; border-radius: 10px; border: 0; background: ' + accent + '; color: #FFFFFF; font: inherit; font-weight: 600; cursor: pointer; opacity: ' + (preAnswered < PRE_TOPICS.length ? '0.45' : '1'),
+      savePre: () => this.setState({ preStatus: 'saved' }), skipPre: () => this.setState({ preStatus: 'skipped' }), editPre: () => this.setState({ preStatus: 'open' }),
+      preSummary: preSummary, preEditLabel: s.preStatus === 'skipped' ? 'Add it now' : 'Edit',
+      reflTopics: reflTopics, reflSections: reflSections, reflProgress: doneCount + ' of 4 sections complete',
+      reflSubmitted: s.reflSubmitted, reflEditing: !s.reflSubmitted,
+      processScales: [scale('Did you feel heard by the group?', 'heard', AGREE5), scale('Was the facilitator fair to everyone?', 'fair', AGREE5)],
+      wantedText: rf.wanted, onWanted: (e) => this.setRefl('wanted', e.target.value),
+      issuesText: rf.issues, onIssues: (e) => this.setRefl('issues', e.target.value),
+      partnerScales: [scale('How helpful was your partner?', 'helpful', AGREE5, 'amber'), scale('Did your partner ever seem to push you toward a particular view?', 'pushed', PUSHED, 'amber')],
+      askPushedWhen: rf.pushed === 'Once or twice' || rf.pushed === 'Often' || rf.pushed === 'Not sure',
+      pushedWhenText: rf.pushedWhen, onPushedWhen: (e) => this.setRefl('pushedWhen', e.target.value),
+      usedChips: multi('used', USED, 'amber'),
+      hasOpenQs: openQItems.length > 0, openQItems: openQItems,
+      otherQsText: rf.otherQs, onOtherQs: (e) => this.setRefl('otherQs', e.target.value),
+      followScales: [{ label: 'Keep me updated about (choose any)', chips: multi('updates', UPDATES) }, scale('How should we contact you?', 'contact', CONTACT)],
+      submitReflection: () => this.setState({ reflSubmitted: true }), editReflection: () => this.setState({ reflSubmitted: false }),
+      submitHint: doneCount === 4 ? 'All sections complete.' : 'You can submit now. Anything left blank stays blank.',
+      reflSummaryRows: reflTopics.map(t => ({ num: t.num, title: t.title, before: t.before, now: t.nowLabel, change: t.change, badgeStyle: t.badgeStyle })),
+      followupNote: followupNote,
       flowCols: flowCols, flowRows: flowRows, noFlowRows: flowRows.length === 0, tagLegend: tagLegend,
       evalRunning: s.evalRunning, evalDone: s.evalDone, evalProgress: s.evalProgress, evalProgressLabel: s.evalProgress + '%', evalStage: evalStage,
       readyToContinue: s.indexed && s.evalDone, rerunEval: () => this.startEval(),

@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Organiser review: post-deliberation responses</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 28 28%27 fill=%27none%27 stroke=%27%231F5A8C%27 stroke-width=%272.4%27%3E%3Ccircle cx=%2710%27 cy=%2712%27 r=%277%27/%3E%3Ccircle cx=%2718%27 cy=%2716%27 r=%277%27/%3E%3C/svg%3E">
+<meta name="description" content="Interactive demo of the Deliberation Partner: an AI coach for participants in citizens' assemblies.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;family=Space+Grotesk:wght@500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#F6F6F3}
+a{color:#1F5A8C}a:hover{color:#163F63}
+button:focus-visible,a:focus-visible{outline:3px solid #8FB4D9;outline-offset:2px}
+</style>
+<style>
+html,body{margin:0}
+.demo-nav{position:fixed;right:16px;bottom:16px;z-index:30;display:flex;gap:4px;padding:4px;border-radius:12px;background:#1B1F24;box-shadow:0 6px 20px rgba(0,0,0,.18);font-family:Inter,system-ui,sans-serif;font-size:13px}
+.demo-nav a{color:#FFFFFF;text-decoration:none;padding:8px 12px;border-radius:8px;min-height:20px}
+.demo-nav a[aria-current="page"]{background:#FFFFFF;color:#1B1F24;font-weight:600}
+.demo-nav a:focus-visible{outline:3px solid #8FB4D9;outline-offset:2px}
+#app-error{display:none;max-width:640px;margin:40px auto;padding:16px 20px;border:1px solid #E3B4AE;border-radius:10px;background:#FBEBE9;color:#6B1F17;font-family:system-ui,sans-serif}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="app-error" role="alert"></div>
+<noscript><p style="font-family:system-ui,sans-serif;max-width:640px;margin:40px auto">This demo needs JavaScript enabled.</p></noscript>
+<nav class="demo-nav" aria-label="Demo pages"><a href="index.html">Participant experience</a><a href="admin.html" aria-current="page">Organiser review</a></nav>
+<template id="dc-template">
+<div style="min-height: 100vh; font-family: Inter, system-ui, sans-serif; color: #1B1F24; background: #F6F6F3; font-size: 15px; line-height: 1.5">
+
+  <header style="background: #FFFFFF; border-bottom: 1px solid #E2E2DC">
+    <div style="max-width: 1360px; margin: 0 auto; padding: 14px 24px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px">
+      <div>
+        <div style="font-size: 13px; color: #5B6169">Climate Assembly UK · How we travel · Breakout room 4</div>
+        <h1 style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 22px; margin: 0">Organiser review: after the discussion</h1>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 14px">
+        <span style="font-size: 13px; color: #5B6169">{{responseCount}}</span>
+        <div role="group" aria-label="How participants are identified" style="display: inline-flex; border: 1px solid #C9CBC4; border-radius: 10px; overflow: hidden">
+          <button type="button" onClick="{{showNames}}" aria-pressed="{{namesPressed}}" style="{{namesBtnStyle}}">Names</button>
+          <button type="button" onClick="{{showPseudonyms}}" aria-pressed="{{pseudoPressed}}" style="{{pseudoBtnStyle}}">Pseudonyms</button>
+        </div>
+      </div>
+    </div>
+    <div style="max-width: 1360px; margin: 0 auto; padding: 0 24px; display: flex; flex-wrap: wrap; gap: 4px" role="tablist" aria-label="Review sections">
+      <sc-for list="{{tabs}}" as="tb" hint-placeholder-count="7">
+        <button type="button" role="tab" aria-selected="{{tb.selected}}" onClick="{{tb.pick}}" style="{{tb.style}}">{{tb.label}}</button>
+      </sc-for>
+    </div>
+  </header>
+
+  <main style="max-width: 1360px; margin: 0 auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+    <div style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 18px">
+
+      <!-- TOPIC VIEW -->
+      <sc-if value="{{isTopic}}" hint-placeholder-val="{{ true }}">
+        <section aria-labelledby="topic-h" style="display: flex; flex-direction: column; gap: 18px">
+          <div style="background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px">
+            <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: baseline">
+              <h2 id="topic-h" style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 20px; margin: 0"><span style="color: #5B6169; margin-right: 8px">{{topicNum}}</span>{{topicTitle}}</h2>
+              <div style="display: flex; flex-wrap: wrap; gap: 6px">
+                <sc-for list="{{changeCounts}}" as="cc" hint-placeholder-count="4"><span style="{{cc.style}}">{{cc.label}}</span></sc-for>
+              </div>
+            </div>
+            <div style="font-size: 13px; color: #5B6169">{{topicNote}}</div>
+
+            <div role="img" aria-label="{{chartAria}}" style="display: flex; flex-direction: column; gap: 6px">
+              <div style="display: grid; grid-template-columns: 130px minmax(0, 1fr) 150px; gap: 12px; font-size: 11px; color: #5B6169">
+                <span></span>
+                <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); text-align: center">
+                  <span>Against</span><span>Leaning against</span><span>Unsure</span><span>Leaning for</span><span>For</span>
+                </div>
+                <span></span>
+              </div>
+              <sc-for list="{{chartRows}}" as="cr" hint-placeholder-count="4">
+                <div style="display: grid; grid-template-columns: 130px minmax(0, 1fr) 150px; gap: 12px; align-items: center">
+                  <span style="font-size: 13px; font-weight: 600">{{cr.name}}</span>
+                  <div style="position: relative; height: 30px; border-radius: 99px; background: #F3F3EF">
+                    <span style="{{cr.lineStyle}}"></span>
+                    <sc-if value="{{cr.hasBefore}}" hint-placeholder-val="{{ true }}"><span style="{{cr.beforeStyle}}"></span></sc-if>
+                    <sc-if value="{{cr.hasNow}}" hint-placeholder-val="{{ true }}"><span style="{{cr.nowStyle}}"></span></sc-if>
+                  </div>
+                  <span style="{{cr.badgeStyle}}">{{cr.change}}</span>
+                </div>
+              </sc-for>
+              <div style="display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; color: #5B6169; margin-top: 4px">
+                <span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 50%; border: 2px solid #3D4651; background: #FFFFFF"></span>Before (pre-survey)</span>
+                <span style="display: inline-flex; align-items: center; gap: 6px"><span style="width: 12px; height: 12px; border-radius: 50%; background: #3D4651"></span>After (reflection)</span>
+                <span>{{chartFootnote}}</span>
+              </div>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px">
+            <div style="background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+              <h3 style="margin: 0; font-size: 15px; color: #24543D">Most persuasive points</h3>
+              <sc-if value="{{noTopMoved}}" hint-placeholder-val="{{ false }}"><div style="font-size: 13px; color: #5B6169">No one picked a point as persuasive on this topic.</div></sc-if>
+              <sc-for list="{{topMoved}}" as="tp" hint-placeholder-count="3">
+                <div style="display: flex; gap: 10px; align-items: flex-start; font-size: 13px">
+                  <span style="flex: 0 0 auto; min-width: 28px; text-align: center; font-weight: 700; color: #24543D; background: #E4F1E8; border-radius: 6px; padding: 1px 6px">{{tp.count}}</span>
+                  <span style="flex: 1">{{tp.text}} <span style="color: #5B6169">({{tp.who}})</span> <a href="{{tp.href}}" onClick="{{tp.go}}">Open in discussion</a></span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+              <h3 style="margin: 0; font-size: 15px; color: #8A4B0F">Least persuasive points</h3>
+              <sc-if value="{{noTopNot}}" hint-placeholder-val="{{ false }}"><div style="font-size: 13px; color: #5B6169">No one picked a point as unpersuasive on this topic.</div></sc-if>
+              <sc-for list="{{topNot}}" as="tp" hint-placeholder-count="3">
+                <div style="display: flex; gap: 10px; align-items: flex-start; font-size: 13px">
+                  <span style="flex: 0 0 auto; min-width: 28px; text-align: center; font-weight: 700; color: #8A4B0F; background: #FBEBDD; border-radius: 6px; padding: 1px 6px">{{tp.count}}</span>
+                  <span style="flex: 1">{{tp.text}} <span style="color: #5B6169">({{tp.who}})</span> <a href="{{tp.href}}" onClick="{{tp.go}}">Open in discussion</a></span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <h3 style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 18px; margin: 4px 0 0">Each participant on this topic</h3>
+          <sc-for list="{{personCards}}" as="pc" hint-placeholder-count="4">
+            <article style="background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px">
+              <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center">
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <span aria-hidden="true" style="{{pc.avatarStyle}}">{{pc.initials}}</span>
+                  <div>
+                    <div style="font-weight: 600">{{pc.name}}</div>
+                    <div style="font-size: 13px; color: #5B6169">{{pc.beforeNow}}</div>
+                  </div>
+                </div>
+                <span style="{{pc.badgeStyle}}">{{pc.change}}</span>
+              </div>
+              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px">
+                <div style="display: flex; flex-direction: column; gap: 6px">
+                  <div style="font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #24543D">What moved them</div>
+                  <sc-if value="{{pc.noMoved}}" hint-placeholder-val="{{ false }}"><div style="font-size: 13px; color: #5B6169">Nothing picked</div></sc-if>
+                  <sc-for list="{{pc.moved}}" as="pt" hint-placeholder-count="1">
+                    <div style="font-size: 13px; background: #F3F8F4; border-radius: 8px; padding: 6px 10px">{{pt.text}} <span style="color: #5B6169">({{pt.who}})</span> <a href="{{pt.href}}" onClick="{{pt.go}}">Open</a></div>
+                  </sc-for>
+                  <sc-if value="{{pc.hasMovedNote}}" hint-placeholder-val="{{ false }}"><div style="font-size: 13px; font-style: italic; color: #3A3F45">"{{pc.movedNote}}"</div></sc-if>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 6px">
+                  <div style="font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #8A4B0F">Not persuasive</div>
+                  <sc-if value="{{pc.noNot}}" hint-placeholder-val="{{ false }}"><div style="font-size: 13px; color: #5B6169">Nothing picked</div></sc-if>
+                  <sc-for list="{{pc.notp}}" as="pt" hint-placeholder-count="1">
+                    <div style="font-size: 13px; background: #FCF4EC; border-radius: 8px; padding: 6px 10px">{{pt.text}} <span style="color: #5B6169">({{pt.who}})</span> <a href="{{pt.href}}" onClick="{{pt.go}}">Open</a></div>
+                  </sc-for>
+                  <sc-if value="{{pc.hasNotNote}}" hint-placeholder-val="{{ false }}"><div style="font-size: 13px; font-style: italic; color: #3A3F45">"{{pc.notNote}}"</div></sc-if>
+                </div>
+              </div>
+              <div style="border-top: 1px solid #F0F0EB; padding-top: 10px; display: flex; flex-direction: column; gap: 6px">
+                <div style="font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: #5B6169">What they said on this topic</div>
+                <sc-if value="{{pc.silent}}" hint-placeholder-val="{{ false }}"><div style="font-size: 13px; color: #5B6169">{{pc.silentNote}}</div></sc-if>
+                <sc-for list="{{pc.said}}" as="sd" hint-placeholder-count="1">
+                  <div style="font-size: 13px; display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap">
+                    <span style="{{sd.tagStyle}}">{{sd.tag}}</span>
+                    <span>{{sd.text}}</span>
+                    <a href="{{sd.href}}" onClick="{{sd.go}}">Open in discussion</a>
+                  </div>
+                </sc-for>
+              </div>
+            </article>
+          </sc-for>
+        </section>
+      </sc-if>
+
+      <!-- PROCESS VIEW -->
+      <sc-if value="{{isProcess}}" hint-placeholder-val="{{ false }}">
+        <section aria-labelledby="proc-h" style="display: flex; flex-direction: column; gap: 14px">
+          <h2 id="proc-h" style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 20px; margin: 0">How the discussion went</h2>
+          <sc-for list="{{processCards}}" as="pc" hint-placeholder-count="4">
+            <article style="background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+              <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center">
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <span aria-hidden="true" style="{{pc.avatarStyle}}">{{pc.initials}}</span>
+                  <span style="font-weight: 600">{{pc.name}}</span>
+                  <span style="font-size: 13px; color: #5B6169">{{pc.messages}}</span>
+                </div>
+                <div style="display: flex; flex-wrap: wrap; gap: 6px; font-size: 13px">
+                  <span>Felt heard: <b style="{{pc.heardStyle}}">{{pc.heard}}</b></span>
+                  <span>Facilitator fair: <b style="{{pc.fairStyle}}">{{pc.fair}}</b></span>
+                </div>
+              </div>
+              <sc-if value="{{pc.hasWanted}}" hint-placeholder-val="{{ false }}"><div style="font-size: 14px"><b>Wanted to speak but didn't:</b> "{{pc.wanted}}"</div></sc-if>
+              <sc-if value="{{pc.hasIssues}}" hint-placeholder-val="{{ false }}"><div style="font-size: 14px"><b>Issues raised:</b> "{{pc.issues}}"</div></sc-if>
+              <sc-if value="{{pc.nothingRaised}}" hint-placeholder-val="{{ false }}"><div style="font-size: 13px; color: #5B6169">No issues raised.</div></sc-if>
+            </article>
+          </sc-for>
+        </section>
+      </sc-if>
+
+      <!-- PARTNER VIEW -->
+      <sc-if value="{{isPartner}}" hint-placeholder-val="{{ false }}">
+        <section aria-labelledby="part-h" style="display: flex; flex-direction: column; gap: 14px">
+          <h2 id="part-h" style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 20px; margin: 0">The AI partner</h2>
+          <div style="background: #FBF4E8; border: 1px solid #EBD9BC; border-radius: 14px; padding: 14px 16px; font-size: 13px; color: #5E3410">Conversations with the partner are private to each participant and are not shown here. These are the participants' own answers. Treat any report of steering as a lead to check against the partner's evaluation results.</div>
+          <sc-if value="{{hasSteerReports}}" hint-placeholder-val="{{ true }}">
+            <div style="background: #FFFFFF; border: 1px solid #EBCB97; border-radius: 14px; padding: 16px 18px; display: flex; flex-direction: column; gap: 10px">
+              <h3 style="margin: 0; font-size: 15px; color: #6B4310">{{steerTitle}}</h3>
+              <sc-for list="{{steerReports}}" as="sr" hint-placeholder-count="1">
+                <div style="font-size: 14px"><b>{{sr.name}}</b> ({{sr.pushed}}): "{{sr.text}}"</div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-for list="{{partnerCards}}" as="pc" hint-placeholder-count="4">
+            <article style="background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: center">
+              <div style="display: flex; align-items: center; gap: 10px; min-width: 160px">
+                <span aria-hidden="true" style="{{pc.avatarStyle}}">{{pc.initials}}</span>
+                <span style="font-weight: 600">{{pc.name}}</span>
+              </div>
+              <span style="font-size: 13px">Helpful: <b>{{pc.helpful}}</b></span>
+              <span style="font-size: 13px">Felt pushed: <b style="{{pc.pushedStyle}}">{{pc.pushed}}</b></span>
+              <span style="font-size: 13px; color: #5B6169">Used: {{pc.used}}</span>
+            </article>
+          </sc-for>
+        </section>
+      </sc-if>
+
+      <!-- FOLLOW-UPS VIEW -->
+      <sc-if value="{{isFollow}}" hint-placeholder-val="{{ false }}">
+        <section aria-labelledby="fol-h" style="display: flex; flex-direction: column; gap: 14px">
+          <h2 id="fol-h" style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 20px; margin: 0">Follow-ups</h2>
+          <sc-for list="{{followCards}}" as="pc" hint-placeholder-count="4">
+            <article style="background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; padding: 14px 18px; display: flex; flex-direction: column; gap: 8px">
+              <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: center">
+                <div style="display: flex; align-items: center; gap: 10px">
+                  <span aria-hidden="true" style="{{pc.avatarStyle}}">{{pc.initials}}</span>
+                  <span style="font-weight: 600">{{pc.name}}</span>
+                </div>
+                <span style="font-size: 13px; color: #5B6169">Contact: <b style="color: #1B1F24">{{pc.contact}}</b></span>
+              </div>
+              <div style="font-size: 14px"><b>Open questions:</b> {{pc.questions}}</div>
+              <div style="font-size: 14px"><b>Wants updates on:</b> {{pc.updates}}</div>
+            </article>
+          </sc-for>
+        </section>
+      </sc-if>
+    </div>
+
+    <aside aria-labelledby="tr-h" style="flex: 1 1 360px; max-width: 460px; background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column">
+      <div style="padding: 12px 16px; border-bottom: 1px solid #E2E2DC">
+        <h2 id="tr-h" style="font-size: 15px; margin: 0">Discussion transcript</h2>
+        <div style="font-size: 12px; color: #5B6169">{{transcriptHint}}</div>
+      </div>
+      <div style="height: 780px; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+        <sc-for list="{{transcript}}" as="m" hint-placeholder-count="6">
+          <div id="{{m.anchor}}" style="{{m.style}}">
+            <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 12px">
+              <b style="color: {{m.color}}">{{m.name}}</b>
+              <span style="display: inline-flex; gap: 4px; align-items: center">
+                <sc-if value="{{m.onTopic}}" hint-placeholder-val="{{ false }}"><span style="font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 99px; background: #E8F0F8; color: #1F4E79">{{m.topicLabel}}</span></sc-if>
+                <span style="color: #5B6169">#{{m.n}}</span>
+              </span>
+            </div>
+            <div style="font-size: 13px">{{m.text}}</div>
+          </div>
+        </sc-for>
+      </div>
+    </aside>
+  </main>
+  <sc-if value="{{drawerOpen}}" hint-placeholder-val="{{ false }}">
+    <div style="position: fixed; inset: 0; z-index: 40; display: flex; justify-content: flex-end">
+      <button type="button" aria-label="Close the discussion panel" onClick="{{closeDrawer}}" style="position: absolute; inset: 0; border: 0; padding: 0; background: rgba(27, 31, 36, 0.35); cursor: pointer"></button>
+      <div role="dialog" aria-modal="true" aria-labelledby="dr-h" style="position: relative; width: 100%; max-width: 480px; height: 100%; background: #FFFFFF; display: flex; flex-direction: column; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15)">
+        <div style="padding: 14px 16px; border-bottom: 1px solid #E2E2DC; display: flex; justify-content: space-between; align-items: center; gap: 12px">
+          <div>
+            <h2 id="dr-h" style="font-size: 16px; margin: 0">In the discussion</h2>
+            <div style="font-size: 12px; color: #5B6169">{{drawerHint}}</div>
+          </div>
+          <button type="button" onClick="{{closeDrawer}}" style="min-height: 40px; padding: 0 14px; border-radius: 8px; border: 1px solid #C9CBC4; background: #FFFFFF; color: #1B1F24; font: inherit; font-size: 14px; cursor: pointer">Close</button>
+        </div>
+        <div id="drawer-scroll" style="position: relative; flex: 1; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+          <sc-for list="{{transcript}}" as="m" hint-placeholder-count="6">
+            <div id="{{m.drawerAnchor}}" style="{{m.style}}">
+              <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 12px">
+                <b style="color: {{m.color}}">{{m.name}}</b>
+                <span style="color: #5B6169">#{{m.n}}</span>
+              </div>
+              <div style="font-size: 13px">{{m.text}}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+</div>
+</template>
+<script type="module">
+import { mount } from './dc-runtime.js';
+mount({ templateId: 'dc-template', appSrc: './admin.js', target: document.getElementById('app'), props: {"startTab": "A", "identity": "names"} })
+  .catch((err) => {
+    const box = document.getElementById('app-error');
+    box.textContent = 'The demo failed to start: ' + err.message;
+    box.style.display = 'block';
+    console.error(err);
+  });
+</script>
+</body>
+</html>

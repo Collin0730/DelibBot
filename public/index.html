@@ -19,6 +19,10 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,label:focus-with
 </style>
 <style>
 html,body{margin:0}
+.demo-nav{position:fixed;right:16px;bottom:16px;z-index:30;display:flex;gap:4px;padding:4px;border-radius:12px;background:#1B1F24;box-shadow:0 6px 20px rgba(0,0,0,.18);font-family:Inter,system-ui,sans-serif;font-size:13px}
+.demo-nav a{color:#FFFFFF;text-decoration:none;padding:8px 12px;border-radius:8px;min-height:20px}
+.demo-nav a[aria-current="page"]{background:#FFFFFF;color:#1B1F24;font-weight:600}
+.demo-nav a:focus-visible{outline:3px solid #8FB4D9;outline-offset:2px}
 #app-error{display:none;max-width:640px;margin:40px auto;padding:16px 20px;border:1px solid #E3B4AE;border-radius:10px;background:#FBEBE9;color:#6B1F17;font-family:system-ui,sans-serif}
 </style>
 </head>
@@ -26,6 +30,7 @@ html,body{margin:0}
 <div id="app"></div>
 <div id="app-error" role="alert"></div>
 <noscript><p style="font-family:system-ui,sans-serif;max-width:640px;margin:40px auto">This demo needs JavaScript enabled.</p></noscript>
+<nav class="demo-nav" aria-label="Demo pages"><a href="index.html" aria-current="page">Participant experience</a><a href="admin.html">Organiser review</a></nav>
 <template id="dc-template">
 <div style="min-height: 100vh; font-family: Inter, system-ui, sans-serif; color: #1B1F24; background: #F6F6F3; font-size: 15px; line-height: 1.5">
 
@@ -200,6 +205,36 @@ html,body{margin:0}
             </button>
           </div>
 
+          <sc-if value="{{preOpen}}" hint-placeholder-val="{{ true }}">
+            <div style="padding: 16px 20px; border-bottom: 1px solid #E2E2DC; background: #F5F8FB; display: flex; flex-direction: column; gap: 14px">
+              <div>
+                <h2 style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 17px; margin: 0">Before the session: where do you stand?</h2>
+                <p style="margin: 2px 0 0; font-size: 13px; color: #5B6169">A quick snapshot, so afterwards you can see what changed and what didn't. There are no right answers, and "No view yet" is a fine answer.</p>
+              </div>
+              <sc-for list="{{preRows}}" as="pr" hint-placeholder-count="3">
+                <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+                  <legend style="font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 6px"><span style="color: #5B6169; margin-right: 6px">{{pr.num}}</span>{{pr.title}}</legend>
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px">
+                    <sc-for list="{{pr.chips}}" as="ch" hint-placeholder-count="6">
+                      <button type="button" onClick="{{ch.pick}}" aria-pressed="{{ch.pressed}}" style="{{ch.style}}">{{ch.label}}</button>
+                    </sc-for>
+                  </div>
+                </fieldset>
+              </sc-for>
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+                <button type="button" onClick="{{savePre}}" disabled="{{preIncomplete}}" style="{{preSaveStyle}}">Save my starting views</button>
+                <button type="button" onClick="{{skipPre}}" style="min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #C9CBC4; background: #FFFFFF; color: #1B1F24; font: inherit; font-size: 14px; cursor: pointer">Skip for now</button>
+                <span style="font-size: 12px; color: #5B6169">{{preProgress}}</span>
+              </div>
+            </div>
+          </sc-if>
+          <sc-if value="{{preDone}}" hint-placeholder-val="{{ false }}">
+            <div style="padding: 10px 20px; border-bottom: 1px solid #E2E2DC; background: #F5F8FB; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: #3A3F45">
+              <span>{{preSummary}}</span>
+              <button type="button" onClick="{{editPre}}" style="min-height: 32px; padding: 0 8px; border: 0; background: transparent; color: #1F5A8C; font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer">{{preEditLabel}}</button>
+            </div>
+          </sc-if>
+
           <div style="height: 480px; overflow-y: auto; display: flex; flex-direction: column-reverse; background: #FAFAF8" aria-live="polite">
             <div style="padding: 20px; display: flex; flex-direction: column; gap: 14px">
               <sc-for list="{{chatItems}}" as="m" hint-placeholder-count="2">
@@ -314,6 +349,7 @@ html,body{margin:0}
               <button type="button" onClick="{{setMapView}}" aria-pressed="{{mapPressed}}" style="{{mapViewBtnStyle}}">Chat and map</button>
               <button type="button" onClick="{{setFlowView}}" aria-pressed="{{flowPressed}}" style="{{flowViewBtnStyle}}">Chat and flow</button>
             </div>
+            <button type="button" onClick="{{toReflect}}" style="min-height: 42px; padding: 0 16px; border-radius: 10px; border: 0; background: {{accent}}; color: #FFFFFF; font: inherit; font-weight: 600; cursor: pointer">Finish and reflect</button>
           </div>
         </div>
 
@@ -663,6 +699,203 @@ html,body{margin:0}
                 </article>
               </div>
             </section>
+          </div>
+        </sc-if>
+      </section>
+    </sc-if>
+
+    <!-- STEP 4: REFLECT -->
+    <sc-if value="{{isReflect}}" hint-placeholder-val="{{ false }}">
+      <section aria-labelledby="refl-h" style="display: flex; flex-direction: column; gap: 20px">
+        <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 12px">
+          <div>
+            <h1 id="refl-h" style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 28px; line-height: 1.2; margin: 0">Reflect on the discussion</h1>
+            <p style="margin: 6px 0 0; color: #5B6169; max-width: 720px">About five minutes. The organisers see your answers alongside what you said in the group discussion. Your private conversations with your partner are never shared.</p>
+          </div>
+          <span style="font-size: 13px; color: #5B6169">{{reflProgress}}</span>
+        </div>
+
+        <sc-if value="{{reflSubmitted}}" hint-placeholder-val="{{ false }}">
+          <div style="background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; padding: 24px; display: flex; flex-direction: column; gap: 16px; max-width: 880px">
+            <div style="display: flex; align-items: center; gap: 12px">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#2F6B4F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="m8 12 3 3 5-6"></path></svg>
+              <div>
+                <h2 style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 20px; margin: 0">Thank you. Your reflections are in.</h2>
+                <div style="font-size: 14px; color: #5B6169">Here is how your views moved, in your own answers.</div>
+              </div>
+            </div>
+            <div style="border: 1px solid #E2E2DC; border-radius: 10px; overflow: hidden">
+              <sc-for list="{{reflSummaryRows}}" as="sr" hint-placeholder-count="4">
+                <div style="display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 12px; padding: 10px 14px; border-top: 1px solid #F0F0EB; align-items: center; font-size: 14px">
+                  <span><b style="color: #5B6169; margin-right: 6px">{{sr.num}}</b>{{sr.title}}</span>
+                  <span style="color: #5B6169">{{sr.before}}</span>
+                  <span>{{sr.now}}</span>
+                  <span style="{{sr.badgeStyle}}">{{sr.change}}</span>
+                </div>
+              </sc-for>
+            </div>
+            <p style="margin: 0; font-size: 13px; color: #5B6169">{{followupNote}}</p>
+            <button type="button" onClick="{{editReflection}}" style="align-self: flex-start; min-height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid #C9CBC4; background: #FFFFFF; color: #1B1F24; font: inherit; font-size: 14px; cursor: pointer">Edit my answers</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{reflEditing}}" hint-placeholder-val="{{ true }}">
+          <div style="display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
+            <nav aria-label="Questionnaire sections" style="flex: 1 1 220px; max-width: 260px; background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; padding: 10px; display: flex; flex-direction: column; gap: 2px">
+              <sc-for list="{{reflSections}}" as="sec" hint-placeholder-count="4">
+                <a href="{{sec.href}}" style="display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 0 10px; border-radius: 8px; color: #1B1F24; text-decoration: none; font-size: 14px">
+                  <span style="{{sec.dotStyle}}">{{sec.mark}}</span>
+                  <span>{{sec.label}}</span>
+                </a>
+              </sc-for>
+            </nav>
+
+            <div style="flex: 999 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+              <h2 id="reflect-views" style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 20px; margin: 0">1. Your views on each topic</h2>
+              <sc-for list="{{reflTopics}}" as="tp" hint-placeholder-count="3">
+                <article style="background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 14px">
+                  <div style="display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: center">
+                    <h3 style="margin: 0; font-size: 17px"><span style="color: #5B6169; margin-right: 8px">{{tp.num}}</span>{{tp.title}}</h3>
+                    <span style="{{tp.badgeStyle}}">{{tp.change}}</span>
+                  </div>
+                  <div style="display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: #3A3F45">
+                    <span>Before the discussion: <b>{{tp.before}}</b></span>
+                    <sc-if value="{{tp.hasDuring}}" hint-placeholder-val="{{ false }}"><span style="color: #6E4A26">During the discussion you marked: <b>{{tp.during}}</b></span></sc-if>
+                  </div>
+                  <fieldset style="border: 0; margin: 0; padding: 0">
+                    <legend style="font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 6px">Where do you stand now?</legend>
+                    <div style="display: flex; flex-wrap: wrap; gap: 4px">
+                      <sc-for list="{{tp.nowChips}}" as="ch" hint-placeholder-count="6">
+                        <button type="button" onClick="{{ch.pick}}" aria-pressed="{{ch.pressed}}" style="{{ch.style}}">{{ch.label}}</button>
+                      </sc-for>
+                    </div>
+                  </fieldset>
+                  <sc-if value="{{tp.askCertainty}}" hint-placeholder-val="{{ false }}">
+                    <fieldset style="border: 0; margin: 0; padding: 0">
+                      <legend style="font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 6px">Your view is the same as before. Did the discussion make you more or less sure of it?</legend>
+                      <div style="display: flex; flex-wrap: wrap; gap: 4px">
+                        <sc-for list="{{tp.certChips}}" as="ch" hint-placeholder-count="3">
+                          <button type="button" onClick="{{ch.pick}}" aria-pressed="{{ch.pressed}}" style="{{ch.style}}">{{ch.label}}</button>
+                        </sc-for>
+                      </div>
+                    </fieldset>
+                  </sc-if>
+
+                  <sc-if value="{{tp.hasPoints}}" hint-placeholder-val="{{ true }}">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px">
+                      <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+                        <legend style="font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 6px; color: #24543D">What moved you, or made your view stronger?</legend>
+                        <sc-for list="{{tp.movedPoints}}" as="pt" hint-placeholder-count="3">
+                          <button type="button" onClick="{{pt.toggle}}" aria-pressed="{{pt.pressed}}" style="{{pt.style}}">
+                            <span style="{{pt.boxStyle}}"><sc-if value="{{pt.on}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></sc-if></span>
+                            <span><b>{{pt.who}}</b> {{pt.text}}</span>
+                          </button>
+                        </sc-for>
+                        <label style="font-size: 12px; color: #5B6169; margin-top: 4px">Anything else that moved you? (optional)
+                          <textarea rows="2" value="{{tp.movedNote}}" onChange="{{tp.onMovedNote}}" style="display: block; width: 100%; box-sizing: border-box; margin-top: 4px; resize: vertical; border: 1px solid #C9CBC4; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; color: #1B1F24"></textarea>
+                        </label>
+                      </fieldset>
+                      <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+                        <legend style="font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 6px; color: #8A4B0F">What wasn't persuasive to you?</legend>
+                        <sc-for list="{{tp.notPoints}}" as="pt" hint-placeholder-count="3">
+                          <button type="button" onClick="{{pt.toggle}}" aria-pressed="{{pt.pressed}}" style="{{pt.style}}">
+                            <span style="{{pt.boxStyle}}"><sc-if value="{{pt.on}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></sc-if></span>
+                            <span><b>{{pt.who}}</b> {{pt.text}}</span>
+                          </button>
+                        </sc-for>
+                        <label style="font-size: 12px; color: #5B6169; margin-top: 4px">Why not? (optional)
+                          <textarea rows="2" value="{{tp.notNote}}" onChange="{{tp.onNotNote}}" style="display: block; width: 100%; box-sizing: border-box; margin-top: 4px; resize: vertical; border: 1px solid #C9CBC4; border-radius: 8px; padding: 8px 10px; font: inherit; font-size: 14px; color: #1B1F24"></textarea>
+                        </label>
+                      </fieldset>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{tp.noPoints}}" hint-placeholder-val="{{ false }}">
+                    <div style="font-size: 13px; color: #5B6169">Nobody made a point on this topic while you were in the discussion.</div>
+                  </sc-if>
+                </article>
+              </sc-for>
+
+              <h2 id="reflect-process" style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 20px; margin: 8px 0 0">2. The discussion itself</h2>
+              <div style="background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 16px">
+                <sc-for list="{{processScales}}" as="q" hint-placeholder-count="2">
+                  <fieldset style="border: 0; margin: 0; padding: 0">
+                    <legend style="font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 6px">{{q.label}}</legend>
+                    <div style="display: flex; flex-wrap: wrap; gap: 4px">
+                      <sc-for list="{{q.chips}}" as="ch" hint-placeholder-count="5">
+                        <button type="button" onClick="{{ch.pick}}" aria-pressed="{{ch.pressed}}" style="{{ch.style}}">{{ch.label}}</button>
+                      </sc-for>
+                    </div>
+                  </fieldset>
+                </sc-for>
+                <label style="font-size: 14px; font-weight: 600">Was there a moment you wanted to speak but didn't? What stopped you? (optional)
+                  <textarea rows="2" value="{{wantedText}}" onChange="{{onWanted}}" style="display: block; width: 100%; box-sizing: border-box; margin-top: 6px; resize: vertical; border: 1px solid #C9CBC4; border-radius: 8px; padding: 8px 10px; font: inherit; font-weight: 400; font-size: 14px; color: #1B1F24"></textarea>
+                </label>
+                <label style="font-size: 14px; font-weight: 600">Any issues with how the discussion was run? The organisers read every answer. (optional)
+                  <textarea rows="2" value="{{issuesText}}" onChange="{{onIssues}}" style="display: block; width: 100%; box-sizing: border-box; margin-top: 6px; resize: vertical; border: 1px solid #C9CBC4; border-radius: 8px; padding: 8px 10px; font: inherit; font-weight: 400; font-size: 14px; color: #1B1F24"></textarea>
+                </label>
+              </div>
+
+              <h2 id="reflect-partner" style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 20px; margin: 8px 0 0">3. Your partner</h2>
+              <div style="background: #FBF4E8; border: 1px solid #EBD9BC; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 16px">
+                <p style="margin: 0; font-size: 13px; color: #6E4A26">Your partner should help you think, never tell you what to think. Your answers here help check that it stays neutral.</p>
+                <sc-for list="{{partnerScales}}" as="q" hint-placeholder-count="2">
+                  <fieldset style="border: 0; margin: 0; padding: 0">
+                    <legend style="font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 6px">{{q.label}}</legend>
+                    <div style="display: flex; flex-wrap: wrap; gap: 4px">
+                      <sc-for list="{{q.chips}}" as="ch" hint-placeholder-count="4">
+                        <button type="button" onClick="{{ch.pick}}" aria-pressed="{{ch.pressed}}" style="{{ch.style}}">{{ch.label}}</button>
+                      </sc-for>
+                    </div>
+                  </fieldset>
+                </sc-for>
+                <sc-if value="{{askPushedWhen}}" hint-placeholder-val="{{ false }}">
+                  <label style="font-size: 14px; font-weight: 600">When did that happen, and what did it say? (optional)
+                    <textarea rows="2" value="{{pushedWhenText}}" onChange="{{onPushedWhen}}" style="display: block; width: 100%; box-sizing: border-box; margin-top: 6px; resize: vertical; border: 1px solid #E3CFAE; border-radius: 8px; padding: 8px 10px; font: inherit; font-weight: 400; font-size: 14px; color: #1B1F24; background: #FFFFFF"></textarea>
+                  </label>
+                </sc-if>
+                <fieldset style="border: 0; margin: 0; padding: 0">
+                  <legend style="font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 6px">Which parts did you use? Choose any.</legend>
+                  <div style="display: flex; flex-wrap: wrap; gap: 4px">
+                    <sc-for list="{{usedChips}}" as="ch" hint-placeholder-count="6">
+                      <button type="button" onClick="{{ch.pick}}" aria-pressed="{{ch.pressed}}" style="{{ch.style}}">{{ch.label}}</button>
+                    </sc-for>
+                  </div>
+                </fieldset>
+              </div>
+
+              <h2 id="reflect-followups" style="font-family: 'Space Grotesk', Inter, sans-serif; font-size: 20px; margin: 8px 0 0">4. Follow-ups</h2>
+              <div style="background: #FFFFFF; border: 1px solid #E2E2DC; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 16px">
+                <sc-if value="{{hasOpenQs}}" hint-placeholder-val="{{ false }}">
+                  <fieldset style="border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px">
+                    <legend style="font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 6px">Questions you asked while preparing. Which are still open for you?</legend>
+                    <sc-for list="{{openQItems}}" as="pt" hint-placeholder-count="2">
+                      <button type="button" onClick="{{pt.toggle}}" aria-pressed="{{pt.pressed}}" style="{{pt.style}}">
+                        <span style="{{pt.boxStyle}}"><sc-if value="{{pt.on}}" hint-placeholder-val="{{ false }}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 5 5 9-10"></path></svg></sc-if></span>
+                        <span>{{pt.text}}</span>
+                      </button>
+                    </sc-for>
+                  </fieldset>
+                </sc-if>
+                <label style="font-size: 14px; font-weight: 600">Any other questions you'd like answered? (optional)
+                  <textarea rows="2" value="{{otherQsText}}" onChange="{{onOtherQs}}" style="display: block; width: 100%; box-sizing: border-box; margin-top: 6px; resize: vertical; border: 1px solid #C9CBC4; border-radius: 8px; padding: 8px 10px; font: inherit; font-weight: 400; font-size: 14px; color: #1B1F24"></textarea>
+                </label>
+                <sc-for list="{{followScales}}" as="q" hint-placeholder-count="2">
+                  <fieldset style="border: 0; margin: 0; padding: 0">
+                    <legend style="font-size: 14px; font-weight: 600; padding: 0; margin-bottom: 6px">{{q.label}}</legend>
+                    <div style="display: flex; flex-wrap: wrap; gap: 4px">
+                      <sc-for list="{{q.chips}}" as="ch" hint-placeholder-count="3">
+                        <button type="button" onClick="{{ch.pick}}" aria-pressed="{{ch.pressed}}" style="{{ch.style}}">{{ch.label}}</button>
+                      </sc-for>
+                    </div>
+                  </fieldset>
+                </sc-for>
+              </div>
+
+              <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 4px 0 16px">
+                <button type="button" onClick="{{submitReflection}}" style="min-height: 46px; padding: 0 20px; border-radius: 10px; border: 0; background: {{accent}}; color: #FFFFFF; font: inherit; font-weight: 600; cursor: pointer">Submit my reflections</button>
+                <span style="font-size: 13px; color: #5B6169">{{submitHint}}</span>
+              </div>
+            </div>
           </div>
         </sc-if>
       </section>
