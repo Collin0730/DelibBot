@@ -125,7 +125,10 @@ function tagStyle(tag) {
 function changeOf(topic, before, now, certainty) {
   if (!now) return { label: 'No answer', tone: 'gray', key: 'none' };
   if (topic.duringOnly) return { label: 'New in the discussion', tone: 'blue', key: 'new' };
+  if (!before) return { label: 'No starting view', tone: 'gray', key: 'none' };
   const b = STANCES.indexOf(before), n = STANCES.indexOf(now);
+  if (b < 0 && n < 0) return { label: 'Still no view', tone: 'gray', key: 'unmoved' };
+  if (b >= 0 && n < 0) return { label: 'Now undecided', tone: 'amber', key: 'less' };
   if (b < 0 && n >= 0) return { label: 'Formed a view', tone: 'blue', key: 'moved' };
   if (n > b) return { label: 'Moved toward For', tone: 'purple', key: 'moved' };
   if (n < b) return { label: 'Moved toward Against', tone: 'purple', key: 'moved' };
@@ -133,12 +136,45 @@ function changeOf(topic, before, now, certainty) {
   if (certainty === 'Less sure') return { label: 'Less certain', tone: 'amber', key: 'less' };
   return { label: 'Unmoved', tone: 'gray', key: 'unmoved' };
 }
+const HANDOFF_KEY = 'delib-demo-reflection';
+function readHandoff() {
+  try { const raw = window.localStorage.getItem(HANDOFF_KEY); return raw ? JSON.parse(raw) : null; } catch (e) { return null; }
+}
+// Build the room: simulated by default; with a handoff from the participant page, "You" takes the fourth seat.
+function buildData(payload) {
+  if (!payload || !payload.feed) return { PEOPLE: PEOPLE, PARTICIPANTS: PARTICIPANTS, TRANSCRIPT: TRANSCRIPT, POINTS: POINTS, RESPONSES: RESPONSES };
+  const people = Object.assign({}, PEOPLE, { you: { name: 'You', pseudo: 'P4', initials: 'You', color: '#1F5A8C' } });
+  const transcript = payload.feed.map(m => ({ who: people[m.who] ? m.who : 'river', text: m.text }));
+  const findMsg = (text) => { const i = transcript.findIndex(m => m.text === text); return i >= 0 ? i : null; };
+  const points = POINTS.filter(p => p.who !== 'dana').map(p => Object.assign({}, p, { msg: findMsg(TRANSCRIPT[p.msg].text) }));
+  (payload.userPosts || []).forEach((u, i) => {
+    const topic = (u.row || '').charAt(0);
+    if (topic && 'ABCD'.indexOf(topic) >= 0) points.push({ id: 'u' + i, topic: topic, who: 'you', msg: u.msg, tag: u.tag || 'Raises', text: u.text });
+  });
+  const pre = payload.pre || {};
+  const topics = {};
+  TOPICS.forEach(t => {
+    const a = (payload.topics || {})[t.id] || {};
+    topics[t.id] = { before: t.duringOnly ? undefined : pre[t.id], now: a.now || '', certainty: a.certainty || '', moved: a.moved || [], notp: a.notp || [], movedNote: a.movedNote || '', notNote: a.notNote || '' };
+  });
+  const you = {
+    topics: topics, heard: payload.heard || '', fair: payload.fair || '', wanted: payload.wanted || '', issues: payload.issues || '',
+    helpful: payload.helpful || '', pushed: payload.pushed || '', pushedWhen: payload.pushedWhen || '', used: payload.used || [],
+    openQs: payload.openQs || [], updates: payload.updates || [], contact: payload.contact || ''
+  };
+  return {
+    PEOPLE: people, PARTICIPANTS: ['priya', 'gary', 'okafor', 'you'], TRANSCRIPT: transcript, POINTS: points,
+    RESPONSES: { priya: RESPONSES.priya, gary: RESPONSES.gary, okafor: RESPONSES.okafor, you: you }
+  };
+}
 const SCALE_TONE = { 'Not at all': '#8A2A22', 'A little': '#8A4B0F', 'Somewhat': '#6B4310', 'Mostly': '#24543D', 'Completely': '#24543D' };
 
 class Component extends DCLogic {
   constructor(props) {
     super(props);
-    this.state = { tab: props.startTab || 'A', names: (props.identity || 'names') === 'names', selectedMsg: null, drawer: false };
+    const payload = readHandoff();
+    this.data = buildData(payload);
+    this.state = { tab: props.startTab || 'A', names: (props.identity || 'names') === 'names', selectedMsg: null, drawer: false, live: !!(payload && payload.feed) };
   }
   componentDidUpdate(prevProps, prevState) {
     if (prevProps.startTab !== this.props.startTab) this.setState({ tab: this.props.startTab || 'A' });
@@ -152,12 +188,19 @@ class Component extends DCLogic {
     }
   }
 
+  showSimulated() {
+    try { window.localStorage.removeItem(HANDOFF_KEY); } catch (e) { /* ignore */ }
+    this.data = buildData(null);
+    this.setState({ live: false, selectedMsg: null, drawer: false });
+  }
+
   renderVals() {
     const s = this.state;
+    const { PEOPLE, PARTICIPANTS, TRANSCRIPT, POINTS, RESPONSES } = this.data;
     const who = (k) => (s.names ? PEOPLE[k].name : PEOPLE[k].pseudo);
     const initials = (k) => (s.names ? PEOPLE[k].initials : PEOPLE[k].pseudo);
     const avatar = (k) => 'flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 34px; border-radius: 50%; color: #FFFFFF; font-size: 12px; font-weight: 600; background: ' + PEOPLE[k].color;
-    const link = (msg) => ({ href: '#msg-' + msg, go: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ selectedMsg: msg, drawer: true }); } });
+    const link = (msg) => ({ href: '#msg-' + (msg === null ? 'none' : msg), go: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ selectedMsg: msg === null ? -1 : msg, drawer: true }); } });
     const pointRef = (pid) => { const p = POINTS.find(x => x.id === pid); return Object.assign({ text: p.text, who: who(p.who) }, link(p.msg)); };
 
     const tabDefs = TOPICS.map(t => ({ id: t.id, label: t.id + '. ' + t.title })).concat([
@@ -181,15 +224,15 @@ class Component extends DCLogic {
         counts[ch.key] = (counts[ch.key] || 0) + 1;
         const b = topic.duringOnly ? -1 : STANCES.indexOf(a.before), n = STANCES.indexOf(a.now);
         const pos = (i) => 10 + i * 20;
-        const lo = b >= 0 ? Math.min(pos(b), pos(n)) : pos(n), hi = b >= 0 ? Math.max(pos(b), pos(n)) : pos(n);
+        const lo = b >= 0 && n >= 0 ? Math.min(pos(b), pos(n)) : 0, hi = b >= 0 && n >= 0 ? Math.max(pos(b), pos(n)) : 0;
         const c = PEOPLE[k].color;
         return {
           name: who(k), change: ch.label, badgeStyle: badgeStyle(ch.tone),
           hasBefore: b >= 0, hasNow: n >= 0,
           lineStyle: 'position: absolute; top: 14px; height: 3px; border-radius: 2px; left: ' + lo + '%; width: ' + (hi - lo) + '%; background: ' + c + '; opacity: .5',
           beforeStyle: 'position: absolute; top: 7px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; box-sizing: border-box; border: 2.5px solid ' + c + '; background: #FFFFFF; left: ' + (b >= 0 ? pos(b) : 0) + '%',
-          nowStyle: 'position: absolute; top: 7px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: ' + c + '; left: ' + pos(n) + '%',
-          aria: who(k) + ': ' + (topic.duringOnly ? '' : (a.before + ' to ')) + a.now
+          nowStyle: 'position: absolute; top: 7px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; background: ' + c + '; left: ' + (n >= 0 ? pos(n) : 0) + '%',
+          aria: who(k) + ': ' + (topic.duringOnly ? '' : ((a.before || 'not recorded') + ' to ')) + (a.now || 'no answer')
         };
       });
       const countDefs = topic.duringOnly ? [['new', 'answered', 'blue']] : [['moved', 'moved', 'purple'], ['reinforced', 'reinforced', 'green'], ['unmoved', 'unmoved', 'gray'], ['less', 'less certain', 'amber']];
@@ -206,7 +249,7 @@ class Component extends DCLogic {
         const spokeAtAll = TRANSCRIPT.some(m => m.who === k);
         return {
           name: who(k), initials: initials(k), avatarStyle: avatar(k), change: ch.label, badgeStyle: badgeStyle(ch.tone),
-          beforeNow: topic.duringOnly ? 'After: ' + a.now + (a.certainty ? ' · ' + a.certainty : '') : 'Before: ' + a.before + '  →  After: ' + a.now + (a.certainty ? ' · ' + a.certainty : ''),
+          beforeNow: topic.duringOnly ? 'After: ' + (a.now || 'no answer') + (a.certainty ? ' · ' + a.certainty : '') : 'Before: ' + (a.before || 'not recorded') + '  →  After: ' + (a.now || 'no answer') + (a.certainty ? ' · ' + a.certainty : ''),
           moved: a.moved.map(pointRef), notp: a.notp.map(pointRef), noMoved: !a.moved.length, noNot: !a.notp.length,
           movedNote: a.movedNote, notNote: a.notNote, hasMovedNote: !!a.movedNote, hasNotNote: !!a.notNote,
           said: said, silent: !said.length,
@@ -229,19 +272,19 @@ class Component extends DCLogic {
       const n = TRANSCRIPT.filter(m => m.who === k).length;
       return {
         name: who(k), initials: initials(k), avatarStyle: avatar(k), messages: n + (n === 1 ? ' message' : ' messages') + ' in the discussion',
-        heard: r.heard, fair: r.fair, heardStyle: 'color: ' + (SCALE_TONE[r.heard] || '#1B1F24'), fairStyle: 'color: ' + (SCALE_TONE[r.fair] || '#1B1F24'),
+        heard: r.heard || 'No answer', fair: r.fair || 'No answer', heardStyle: 'color: ' + (SCALE_TONE[r.heard] || '#1B1F24'), fairStyle: 'color: ' + (SCALE_TONE[r.fair] || '#1B1F24'),
         wanted: r.wanted, issues: r.issues, hasWanted: !!r.wanted, hasIssues: !!r.issues, nothingRaised: !r.wanted && !r.issues
       };
     });
-    const steer = PARTICIPANTS.filter(k => RESPONSES[k].pushed !== 'No');
+    const steer = PARTICIPANTS.filter(k => ['Once or twice', 'Often', 'Not sure'].indexOf(RESPONSES[k].pushed) >= 0);
     const partnerCards = PARTICIPANTS.map(k => {
       const r = RESPONSES[k];
-      return { name: who(k), initials: initials(k), avatarStyle: avatar(k), helpful: r.helpful, pushed: r.pushed, used: r.used.join(', ') || 'nothing',
+      return { name: who(k), initials: initials(k), avatarStyle: avatar(k), helpful: r.helpful || 'No answer', pushed: r.pushed || 'No answer', used: r.used.join(', ') || 'nothing',
         pushedStyle: 'color: ' + (r.pushed === 'No' ? '#24543D' : '#8A4B0F') };
     });
     const followCards = PARTICIPANTS.map(k => {
       const r = RESPONSES[k];
-      return { name: who(k), initials: initials(k), avatarStyle: avatar(k), contact: r.contact, questions: r.openQs.join('; ') || 'None', updates: r.updates.join('; ') || 'None' };
+      return { name: who(k), initials: initials(k), avatarStyle: avatar(k), contact: r.contact || 'No answer', questions: r.openQs.join('; ') || 'None', updates: r.updates.join('; ') || 'None' };
     });
 
     const topicMsgs = {};
@@ -269,8 +312,9 @@ class Component extends DCLogic {
       steerReports: steer.map(k => ({ name: who(k), pushed: RESPONSES[k].pushed, text: RESPONSES[k].pushedWhen || 'No details given.' })),
       transcript: transcript,
       drawerOpen: s.drawer, closeDrawer: () => this.setState({ drawer: false }),
-      drawerHint: s.selectedMsg === null ? '' : 'Message #' + (s.selectedMsg + 1) + ' is highlighted. The full discussion is shown for context.',
-      transcriptHint: s.selectedMsg === null ? 'Click "Open in discussion" on any response to see that moment in context.' : 'Showing message #' + (s.selectedMsg + 1) + ', highlighted.'
+      drawerHint: s.selectedMsg === null ? '' : s.selectedMsg < 0 ? 'That point was made after this participant left the discussion, so it is not in their transcript.' : 'Message #' + (s.selectedMsg + 1) + ' is highlighted. The full discussion is shown for context.',
+      isLive: s.live, isSimulated: !s.live, showSimulated: () => this.showSimulated(),
+      transcriptHint: s.selectedMsg === null || s.selectedMsg < 0 ? 'Click "Open in discussion" on any response to see that moment in context.' : 'Showing message #' + (s.selectedMsg + 1) + ', highlighted.'
     }, vals);
   }
 }

@@ -1,11 +1,11 @@
 {
   "name": "deliberation-partner-demo",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Interactive demo of the Deliberation Partner: an AI coach for participants in citizens' assemblies.",
   "scripts": {
-    "start": "serve public --single --listen tcp://0.0.0.0:${PORT:-3000}",
-    "dev": "serve public --single --listen 3000",
+    "start": "serve public --listen tcp://0.0.0.0:${PORT:-3000}",
+    "dev": "serve public --listen 3000",
     "build": "echo \"Static site: nothing to build. Files are in public/.\""
   },
   "dependencies": {

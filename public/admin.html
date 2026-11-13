@@ -52,6 +52,18 @@ html,body{margin:0}
 
   <main style="max-width: 1360px; margin: 0 auto; padding: 24px; display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start">
     <div style="flex: 999 1 640px; min-width: 0; display: flex; flex-direction: column; gap: 18px">
+      <sc-if value="{{isLive}}" hint-placeholder-val="{{ false }}">
+        <div role="status" style="background: #EEF3F8; border: 1px solid #C9D8E6; border-radius: 14px; padding: 14px 16px; display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; justify-content: space-between">
+          <div style="font-size: 14px; color: #1B1F24; max-width: 720px"><b>These are your answers.</b> You appear as "You" (P4), alongside three simulated participants. The transcript is the discussion you just took part in, including what you said.</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px">
+            <a href="index.html" style="display: inline-flex; align-items: center; min-height: 38px; padding: 0 14px; border-radius: 10px; border: 1px solid #C9CBC4; background: #FFFFFF; color: #1B1F24; font-size: 14px; text-decoration: none">Back to the participant experience</a>
+            <button type="button" onClick="{{showSimulated}}" style="min-height: 38px; padding: 0 14px; border-radius: 10px; border: 1px solid #C9CBC4; background: #FFFFFF; color: #1B1F24; font: inherit; font-size: 14px; cursor: pointer">Show the simulated room instead</button>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{isSimulated}}" hint-placeholder-val="{{ true }}">
+        <div style="font-size: 13px; color: #5B6169">Simulated responses from four participants. Complete the participant experience and submit your reflection to see your own answers here.</div>
+      </sc-if>
 
       <!-- TOPIC VIEW -->
       <sc-if value="{{isTopic}}" hint-placeholder-val="{{ true }}">

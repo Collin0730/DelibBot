@@ -87,6 +87,8 @@ def build_page(src: str, page: str, appjs: str, count: int) -> None:
 
     if "</template>" in template:
         raise SystemExit(f"{src}: the markup contains </template>, which would break the page.")
+    # Links between canvas artboards become links between site pages.
+    template = template.replace('href="FullUX.dc.html"', 'href="index.html"').replace('href="AdminReview.dc.html"', 'href="admin.html"')
 
     index = (
         INDEX.replace("__TITLE__", title)

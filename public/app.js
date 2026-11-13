@@ -93,6 +93,11 @@ const USED = ['Preparation chat', 'Whispers in the chat', 'Map view', 'Flow view
 const UPDATES = ["The assembly's final recommendations", 'Answers to my open questions', 'Future sessions'];
 const CONTACT = ['Email', 'Text message', "Don't contact me"];
 const SAMPLE_PRE = { A: 'Leaning against', B: 'Leaning for', C: 'Leaning for' };
+// Flow entry index (participant side) -> point id in the organiser review.
+const E_TO_P = { e1: 'p1', e2: 'p2', e3: 'p3', e4: 'p3', e5: 'p4', e7: 'p5', e8: 'p6', e9: 'p7', e10: 'p10', e11: 'p10',
+  e12: 'p11', e13: 'p12', e14: 'p13', e15: 'p16', e17: 'p14', e18: 'p14', e19: 'p15' };
+const HANDOFF_KEY = 'delib-demo-reflection';
+function mapPoints(ids) { const out = []; ids.forEach(id => { const p = E_TO_P[id]; if (p && out.indexOf(p) < 0) out.push(p); }); return out; }
 
 function blankReflection() {
   const topics = {};
@@ -352,6 +357,31 @@ class Component extends DCLogic {
     else { cur.push(pid); t[other] = t[other].filter(x => x !== pid); }
     t[list] = cur;
     this.setState({ refl: Object.assign({}, r, { topics: Object.assign({}, r.topics, { [id]: t }) }) });
+  }
+
+  handoff() {
+    const s = this.state, rf = s.refl;
+    const topics = {};
+    Object.keys(rf.topics).forEach(k => {
+      const t = rf.topics[k];
+      topics[k] = { now: t.now, certainty: t.certainty, moved: mapPoints(t.moved), notp: mapPoints(t.notp), movedNote: t.movedNote, notNote: t.notNote };
+    });
+    const userPosts = [];
+    s.feed.forEach((m, i) => {
+      if (m.who !== 'you') return;
+      const entry = s.userEntries.find(e => e.text === m.text);
+      userPosts.push({ msg: i, text: m.text, row: entry ? entry.row : rowForText(m.text), tag: entry ? entry.tag : 'Raises' });
+    });
+    const payload = {
+      version: 1, submittedAt: new Date().toISOString(),
+      pre: s.pre, topics: topics,
+      heard: rf.heard, fair: rf.fair, wanted: rf.wanted, issues: rf.issues,
+      helpful: rf.helpful, pushed: rf.pushed, pushedWhen: rf.pushedWhen, used: rf.used,
+      openQs: rf.openQs.concat(rf.otherQs ? [rf.otherQs] : []), updates: rf.updates, contact: rf.contact,
+      feed: s.feed.map(m => ({ who: m.who, text: m.text })), userPosts: userPosts
+    };
+    try { window.localStorage.setItem(HANDOFF_KEY, JSON.stringify(payload)); } catch (e) { /* storage unavailable: the review shows simulated data */ }
+    this.setState({ reflSubmitted: true });
   }
 
   // ---------- materials ----------
@@ -795,8 +825,8 @@ class Component extends DCLogic {
       hasOpenQs: openQItems.length > 0, openQItems: openQItems,
       otherQsText: rf.otherQs, onOtherQs: (e) => this.setRefl('otherQs', e.target.value),
       followScales: [{ label: 'Keep me updated about (choose any)', chips: multi('updates', UPDATES) }, scale('How should we contact you?', 'contact', CONTACT)],
-      submitReflection: () => this.setState({ reflSubmitted: true }), editReflection: () => this.setState({ reflSubmitted: false }),
-      submitHint: doneCount === 4 ? 'All sections complete.' : 'You can submit now. Anything left blank stays blank.',
+      submitReflection: () => this.handoff(), editReflection: () => this.setState({ reflSubmitted: false }),
+      submitHint: (doneCount === 4 ? 'All sections complete. ' : 'You can submit now; anything left blank stays blank. ') + 'Next, you will see your answers from the organiser\'s side.',
       reflSummaryRows: reflTopics.map(t => ({ num: t.num, title: t.title, before: t.before, now: t.nowLabel, change: t.change, badgeStyle: t.badgeStyle })),
       followupNote: followupNote,
       flowCols: flowCols, flowRows: flowRows, noFlowRows: flowRows.length === 0, tagLegend: tagLegend,

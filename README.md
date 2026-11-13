@@ -13,9 +13,9 @@ The site has two pages, linked by a small bar in the bottom-right corner.
 
 **Organiser review** (`admin.html`)
 
-Simulated responses from one breakout room. For each topic: opinion change before and after, the most and least persuasive points, and each participant's answers alongside what they said. Every point has "Open in discussion", which opens the transcript at that moment. Tabs for process, the AI partner (including any reports of steering), and follow-ups, plus a Names / Pseudonyms toggle.
+Submitting the reflection takes you straight here, with your own answers in the fourth seat as "You", next to three simulated participants. The transcript is the discussion you just took part in, including what you said, so "Open in discussion" lands on your actual messages. "Show the simulated room instead" switches back to the fully simulated room. Opened directly, the page shows simulated responses from one breakout room. For each topic: opinion change before and after, the most and least persuasive points, and each participant's answers alongside what they said. Every point has "Open in discussion", which opens the transcript at that moment. Tabs for process, the AI partner (including any reports of steering), and follow-ups, plus a Names / Pseudonyms toggle.
 
-Everything is simulated in the browser: there is no backend, no API key, and no data leaves the page. Partner answers and the discussion use real figures and speaker names from the Climate Assembly UK materials. Uploaded files are only listed by name; their contents are never read or sent anywhere. Questionnaire answers stay in the page and are not saved.
+Everything is simulated in the browser: there is no backend, no API key, and no data leaves the page. Partner answers and the discussion use real figures and speaker names from the Climate Assembly UK materials. Uploaded files are only listed by name; their contents are never read or sent anywhere. Questionnaire answers are kept only in your browser (localStorage) to pass them to the organiser page; nothing is sent to a server.
 
 ## Run it locally
 
@@ -56,7 +56,7 @@ public/
   vendor/preact.mjs  Preact 10 (MIT licence in vendor/PREACT-LICENSE.txt), bundled so nothing loads from a CDN
 tools/
   build_from_canvas.py  regenerates index.html and app.js from the Design canvas artboard
-package.json       `serve` for Railway and local preview
+package.json       `serve` for Railway and local preview (plain static mode, so /admin works)
 vercel.json        static output settings for Vercel
 ```
 
