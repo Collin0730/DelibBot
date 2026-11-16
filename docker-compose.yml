@@ -1,0 +1,24 @@
+# Local development: Postgres plus the app on http://localhost:8000
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: deliberation_partner
+    ports: ["5432:5432"]
+    volumes: ["pgdata:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 3s
+      retries: 20
+  web:
+    build: .
+    depends_on:
+      db: { condition: service_healthy }
+    env_file: [{ path: .env, required: false }]
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/deliberation_partner
+      PORT: "8000"
+    ports: ["8000:8000"]
+volumes:
+  pgdata:

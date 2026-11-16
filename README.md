@@ -1,75 +1,146 @@
-# Deliberation Partner: interactive demo
+# Deliberation Partner
 
-A clickable demo of the Deliberation Partner, an AI coach for participants in citizens' assemblies, using the Climate Assembly UK materials as the example.
+A working web app for running small-group deliberations (for example citizens' assembly breakout rooms) with a private AI partner for each participant.
 
-The site has two pages, linked by a small bar in the bottom-right corner.
+- **Organisers** set up a deliberation, upload briefing materials, check the partner with an evaluation run, invite participants, and review how views moved afterwards.
+- **Moderators** run the live discussion and confirm what goes into the flow.
+- **Participants** prepare with a private partner, take part in a live group chat, and reflect afterwards.
 
-**Participant experience** (`index.html`)
+One service does everything: a FastAPI app serves the API, the live chat (WebSocket) and the web pages. Data lives in Postgres.
 
-1. **Materials**: upload a folder (or use the demo set), build the partner, and see the evaluation health check.
-2. **Prepare**: a quick "where do you stand?" pre-survey, then a private chat with the partner, with sourced answers.
-3. **Discuss**: a simulated group discussion with three members and a facilitator, viewable as **Chat only**, **Chat and map**, or **Chat and flow**, with the partner's private check-ins throughout.
-4. **Reflect**: a post-deliberation questionnaire. Before and after views per topic (telling apart reinforced, unmoved, and less certain), what moved you and what didn't (picked from the actual points made), plus the discussion process, the AI partner, and follow-ups.
+## What is in the box
 
-**Organiser review** (`admin.html`)
+| Path | What it is |
+|---|---|
+| `app/models.py` | The data model: 19 tables and 3 views |
+| `app/routers/` | The API: organiser, participant, live room, review and export |
+| `app/ai.py` | The partner, the flow tagger, AI stand-ins, whispers, the evaluation |
+| `delib/` | The Phase 1 coach and evaluation package (retrieval, prompts, judge) |
+| `web/` | The web app. Plain JavaScript modules, no build step |
+| `alembic/` | Database migrations |
+| `configs/models.yaml` | Which model plays which role |
+| `examples/` | Sample briefing documents to upload |
+| `tests/` | An end-to-end API test of a whole deliberation |
 
-Submitting the reflection takes you straight here, with your own answers in the fourth seat as "You", next to three simulated participants. The transcript is the discussion you just took part in, including what you said, so "Open in discussion" lands on your actual messages. "Show the simulated room instead" switches back to the fully simulated room. Opened directly, the page shows simulated responses from one breakout room. For each topic: opinion change before and after, the most and least persuasive points, and each participant's answers alongside what they said. Every point has "Open in discussion", which opens the transcript at that moment. Tabs for process, the AI partner (including any reports of steering), and follow-ups, plus a Names / Pseudonyms toggle.
+## Run it on your computer
 
-Everything is simulated in the browser: there is no backend, no API key, and no data leaves the page. Partner answers and the discussion use real figures and speaker names from the Climate Assembly UK materials. Uploaded files are only listed by name; their contents are never read or sent anywhere. Questionnaire answers are kept only in your browser (localStorage) to pass them to the organiser page; nothing is sent to a server.
+You need Python 3.11 or newer and a Postgres database. The quickest route is Docker:
 
-## Run it locally
-
-```powershell
-npm install
-npm run dev
+```
+docker compose up --build
 ```
 
-Then open http://localhost:3000. No Node? Any static server works, for example `py -m http.server 3000 -d public`.
+Then open http://localhost:8000 and sign in with `lucy@example.org` and the password `change-me`.
 
-## Deploy to Vercel
+Without Docker (Windows PowerShell shown):
 
-**From GitHub:** push this folder to a repository, then in Vercel choose **Add New > Project**, import the repo, and keep the framework preset as **Other**. `vercel.json` tells Vercel to serve the `public/` folder. Click **Deploy**.
-
-**From the command line:**
-
-```powershell
-npx vercel          # preview deployment
-npx vercel --prod   # production
 ```
+py -m venv .venv
+.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+copy .env.example .env        # then edit .env: set DATABASE_URL, SECRET_KEY, ADMIN_PASSWORD
+alembic upgrade head
+uvicorn app.main:app --reload
+```
+
+Keep API keys in `.env` (it is git-ignored). Never commit them.
+
+### Try the whole flow by yourself
+
+1. Sign in, open **Moderators**, add yourself as a moderator and copy the sign-in link.
+2. **Create new**, pick that moderator, then upload the files in `examples/riverside_library` on the Materials step and run the evaluation.
+3. On Details, add two or three options (these become the first rows of the flow).
+4. On Participants, add one person, click **Add AI stand-ins**, then **Send invites**. Copy the person's invite link.
+5. Schedule it. Open the moderator link in one browser window and the invite link in a private window.
+6. As the participant: accept, answer the pre-survey, ask the partner something.
+7. As the moderator: start the deliberation. Chat from both windows. The stand-ins reply, the flow fills in, and proposed tags appear for the moderator to confirm.
+8. End the deliberation. The participant window moves to the reflection. Submit it, then open the organiser review.
+
+Each role's link works in its own tab, so one browser can hold an organiser tab, a moderator tab and a participant tab at once.
 
 ## Deploy to Railway
 
-1. Push this folder to a GitHub repository.
-2. In Railway, choose **New Project > Deploy from GitHub repo** and pick the repo.
-3. Railway detects Node, runs `npm install`, then `npm start`, which serves `public/` on the port Railway provides.
-4. Under the service's **Settings > Networking**, click **Generate Domain** to get a public URL.
+1. Push this folder to a new GitHub repository.
+2. In Railway: **New Project**, **Deploy from GitHub repo**, and pick the repository. Railway builds it from the `Dockerfile` (see `railway.json`).
+3. In the same project, add a **PostgreSQL** database.
+4. On the web service, open **Variables** and add:
 
-## How it's built
+   | Variable | Value |
+   |---|---|
+   | `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
+   | `SECRET_KEY` | A long random string |
+   | `ADMIN_EMAIL` | Your email (the first organiser account) |
+   | `ADMIN_PASSWORD` | A strong password |
+   | `ANTHROPIC_API_KEY` and/or `OPENAI_API_KEY` | Optional. Without either, the AI runs on the mock |
+
+5. Under **Settings, Networking**, generate a domain. Open it and sign in.
+
+The service refuses to start on Railway until `SECRET_KEY` and `ADMIN_PASSWORD` are set, so the site is never public with the default password. Migrations run automatically on every deploy. The health check is `/api/health`, which also reports which models are live.
+
+The admin account is created only when no organiser exists. To change the password later, update it in the database or delete the organiser row and redeploy.
+
+## Models
+
+`configs/models.yaml` lists, for each role, the profiles to try in order. The first one whose API key is present is used:
+
+| Role | Does | Default order |
+|---|---|---|
+| `coach` | The participant-facing partner and whispers | Claude Sonnet, then GPT-6 Luna |
+| `tagger` | Turns chat messages into flow rows and entries | Claude Haiku, then GPT-6 Luna |
+| `standin` | AI stand-in participants | Claude Haiku, then GPT-6 Luna |
+| `participant_sim`, `judge` | Evaluation conversations and scoring | Haiku and Luna |
+
+With only `OPENAI_API_KEY` set, every role uses GPT-6 Luna. With no key, every role uses the offline mock: the partner gives placeholder answers, the tagger uses keyword rules, and evaluation scores are placeholders. The UI says so wherever that matters.
+
+Model IDs and prices in that file change often. Check them against the providers' pricing pages before quoting costs. An evaluation run with real models is 12 short conversations plus judging.
+
+## The data model
+
+The flow is the centre of it:
+
+- `flow_concept` is a row: an option, or a sub-point under one. It records who raised it and in which message.
+- `flow_entry` is one person's position on a row (support, dissent, question or clarify), tied to the message where they said it.
+- Entries are never overwritten. A change of mind is a new entry. A wrong tag is fixed with a new entry whose `supersedes_id` points at the old one. `topic_parent_id` links an entry to the one it replies to.
+- The tagger proposes (`status = proposed`) and the moderator confirms. Tags above `TAG_AUTO_CONFIRM` confidence skip review.
+
+Other choices worth knowing:
+
+- Names and emails live only in `person`. Everything else uses participant ids and pseudonyms.
+- What people say in the room (`flow_entry`) is separate from what they privately think (`private_stance`, `survey_response`).
+- `survey_response` holds both the pre-survey and the reflection. `reflection_point` links a reflection to the exact entries that moved someone.
+- `partner_whisper` logs every unprompted nudge with its model and prompt version, as an audit trail for non-steering.
+- Uploaded files are turned into text (`document.content`) and chunks. The original file is not stored, so no file storage is needed.
+
+Views: `v_current_entry`, `v_public_position`, `v_concept_summary`.
+
+## The API
+
+Interactive docs are at `/api/docs` on the running site, and the OpenAPI file is at `/api/openapi.json`.
+
+`GET /api/deliberations/{id}/export` returns everything about one deliberation as JSON. It is pseudonymous by default, leaves out private partner chats, and includes survey and stance data only for people who agreed to research use. Add `?names=true` for an organiser copy with names.
+
+Callers authenticate with `Authorization: Bearer <token>`: organisers with the token from `POST /api/auth/login`, moderators with `m.<their link token>`, participants with `p.<their link token>`.
+
+## Tests
 
 ```
-public/
-  index.html       participant experience: page shell, styles, markup inside <template id="dc-template">
-  app.js           its logic: state, scripted content, evaluation metrics, partner behaviour, questionnaire
-  admin.html       organiser review page
-  admin.js         its logic and the simulated responses
-  dc-runtime.js    small renderer that fills the template from app.js (about 120 lines)
-  vendor/preact.mjs  Preact 10 (MIT licence in vendor/PREACT-LICENSE.txt), bundled so nothing loads from a CDN
-tools/
-  build_from_canvas.py  regenerates index.html and app.js from the Design canvas artboard
-package.json       `serve` for Railway and local preview (plain static mode, so /admin works)
-vercel.json        static output settings for Vercel
+pip install -r requirements-dev.txt
+$env:TEST_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/delib_test"   # an empty database
+pytest
 ```
 
-The markup uses a small template syntax: `{{ value }}` placeholders, `<sc-for>` for lists, `<sc-if>` for conditional blocks, and event handlers such as `onClick="{{ handler }}"`. `dc-runtime.js` renders it through Preact, so typing and scroll positions are preserved as the demo updates.
+The test wipes and recreates every table in that database, so never point it at real data.
 
-The only external request is Google Fonts (Inter and Space Grotesk). Remove the two font `<link>` tags near the top of `public/index.html` to make the site fully self-contained; it falls back to system fonts.
+## Known limits
 
-## Updating the demo
+- **Email is not connected.** "Send invites" makes the links live; you copy and send them yourself. Links work like passwords.
+- **Moderators and participants have no passwords**, only their links. Removing a moderator or cancelling an invite kills the link.
+- **Scaling.** Live chat state is held in the web process, so run one replica. To scale out, replace the hub in `app/realtime.py` with Redis pub/sub.
+- **Background AI jobs run in-process.** If the service restarts during an evaluation, that run stays "running"; start a new one.
+- **Organisers can watch a room but not post.** The moderator speaks from their own link.
+- **No map view yet.** The room has "Chat only" and "Chat and flow".
+- **Scanned PDFs** need OCR before upload.
 
-The demo was designed on a Design canvas. To regenerate the site from updated artboard files:
+## Licences
 
-```powershell
-py tools/build_from_canvas.py path\to\FullUX.dc.html path\to\AdminReview.dc.html
-```
-
-Small changes can also be made directly in `public/app.js` / `public/admin.js` (logic and text) and the matching `.html` files (layout).
+The app code is yours to license. `web/static/vendor` contains Preact and htm (MIT and Apache 2.0, licence files included).
