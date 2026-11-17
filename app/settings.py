@@ -23,7 +23,8 @@ DATABASE_URL = _db_url()
 SECRET_KEY = os.environ.get("SECRET_KEY") or "dev-only-secret-change-me-before-deploying-0000"
 ADMIN_EMAIL = (os.environ.get("ADMIN_EMAIL") or "lucy@example.org").strip().lower()
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD") or "change-me"
-ADMIN_NAME = os.environ.get("ADMIN_NAME", "Lucy")
+ADMIN_NAME_SET = bool((os.environ.get("ADMIN_NAME") or "").strip())
+ADMIN_NAME = (os.environ.get("ADMIN_NAME") or "").strip() or "Organiser"
 TOKEN_HOURS = int(os.environ.get("TOKEN_HOURS", "72"))
 
 MODELS_FILE = Path(os.environ.get("MODELS_FILE", ROOT / "configs" / "models.yaml"))

@@ -33,6 +33,11 @@ def test_full_lifecycle(client):
     # moderator, deliberation, options
     mods = client.post("/api/moderators", json={"name": "River", "email": "river@example.org"}, headers=org).json()
     mod = mods[0]
+    # the organiser's own email as a moderator takes the name typed now, not the default admin name
+    me = client.post("/api/moderators", json={"name": "Collin Warren", "email": "lucy@example.org"}, headers=org).json()
+    mine = [x for x in me if x["email"] == "lucy@example.org"]
+    assert [x["name"] for x in mine] == ["Collin Warren"]
+    client.delete(f"/api/moderators/{mine[0]['id']}", headers=org)
     assert client.post("/api/moderators", json={"name": "River", "email": "river@example.org"}, headers=org).status_code == 409
     d = client.post("/api/deliberations", json={"title": "Library budget", "framing_question": "Shorter hours or close a branch?", "moderator_id": mod["id"]}, headers=org).json()
     did = d["id"]
@@ -45,12 +50,17 @@ def test_full_lifecycle(client):
     assert client.post(f"/api/deliberations/{did}/eval", headers=org).status_code == 409
     up = client.post(f"/api/deliberations/{did}/documents", files=[("files", ("briefing.txt", BRIEFING, "text/plain")), ("files", ("notes.xlsx", b"x", "application/octet-stream"))], headers=org).json()
     assert up["added"] == ["briefing.txt"] and len(up["skipped"]) == 1
+    again = client.post(f"/api/deliberations/{did}/documents", files=[("files", ("briefing.txt", BRIEFING, "text/plain"))], headers=org).json()
+    assert again["added"] == [] and again["unchanged"] == ["briefing.txt"]
     client.post(f"/api/deliberations/{did}/participants", json={"name": "Dana", "email": "dana@example.org"}, headers=org)
     assert client.post(f"/api/deliberations/{did}/invites", headers=org).status_code == 409  # no evaluation yet
-    client.post(f"/api/deliberations/{did}/eval", headers=org)
+    started = client.post(f"/api/deliberations/{did}/eval", headers=org).json()["eval"]
+    assert started["conversations_total"] == 2 and "remaining_s" in started
     d = wait_for(lambda: (lambda x: x if x["eval"]["status"] != "running" else None)(client.get(f"/api/deliberations/{did}", headers=org).json()), 60)
     assert d["eval"]["status"] in ("passed", "below_goal"), d["eval"]
     assert d["eval"]["health"] > 50 and len(d["eval"]["metrics"]) >= 6
+    why = client.get(f"/api/eval-runs/{d['eval']['id']}/details", headers=org).json()["conversations"]
+    assert len(why) == 2 and why[0]["turns"] and why[0]["scores"]["neutrality"]["rationale"]
 
     # people and invites
     d = client.post(f"/api/deliberations/{did}/participants", json={"name": "Sam", "email": "sam@example.org"}, headers=org).json()

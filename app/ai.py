@@ -494,14 +494,52 @@ def attainment(result: float, goal: float, higher: bool) -> float:
     return 1.0 if result <= goal else max(0.0, min(1.0, goal / result))
 
 
+def eval_details(records: list[dict]) -> dict:
+    """A compact copy of each simulated conversation: scores, the judge's reasons, flags and the transcript."""
+    rubric_ids = [k for k, _l, where, *_ in EVAL_METRICS if where == "rubric"]
+    convs = []
+    for r in records:
+        judge = r.get("judge") or {}
+        reviews = {x.get("turn"): x for x in judge.get("turn_reviews") or []}
+        checks = r.get("checks") or []
+        turns = []
+        for i, t in enumerate(r.get("turns") or [], 1):
+            c = checks[i - 1] if i <= len(checks) else {}
+            rv = reviews.get(i) or {}
+            turns.append({
+                "participant": t.get("participant", ""), "coach": (t.get("coach") or {}).get("text", ""),
+                "flags": c.get("flags", []), "stance_leaks": c.get("stance_leaks", []), "invalid_citations": c.get("invalid_citations", []),
+                "verdict": rv.get("verdict"), "issues": rv.get("issues", []), "explanation": rv.get("explanation", ""), "better_response": rv.get("better_response", ""),
+            })
+        convs.append({
+            "id": r.get("run_id"), "persona": r.get("persona_name"), "knowledge_level": r.get("knowledge_level"), "scenario": r.get("scenario_id"), "probe": r.get("probe"),
+            "brief": r.get("scenario_brief"), "error": r.get("error") or r.get("judge_error"),
+            "scores": {k: {"score": judge[k].get("score", 0), "rationale": judge[k].get("rationale", ""), "evidence_turns": judge[k].get("evidence_turns", [])} for k in rubric_ids if isinstance(judge.get(k), dict)},
+            "steering_turns": judge.get("steering_turns") or [], "notes": judge.get("overall_notes") or "", "turns": turns,
+        })
+    return {"conversations": convs}
+
+
+def eval_estimate_s(db, run: m.EvalRun) -> int:
+    """Rough total run time: the last finished run on the same coach model, else a rule of thumb."""
+    prev = db.scalar(select(m.EvalRun).where(m.EvalRun.coach_model == run.coach_model, m.EvalRun.status.in_(("passed", "below_goal")), m.EvalRun.conversations_total > 0)
+                     .order_by(m.EvalRun.finished_at.desc()).limit(1))
+    total = run.conversations_total or 1
+    if prev and prev.finished_at:
+        return max(5, int((prev.finished_at - prev.started_at).total_seconds() * total / prev.conversations_total))
+    if is_mock("coach"):
+        return 10
+    return -(-total // 4) * (settings.EVAL_TURNS * 20 + 50)  # four conversations at a time
+
+
 def run_eval(run_id) -> None:
     from delib.evals.runner import EvalRunner, Suite
 
-    def set_progress(pct: int) -> None:
+    def set_progress(done: int, total: int) -> None:
         with SessionLocal() as s:
             r = s.get(m.EvalRun, run_id)
             if r:
-                r.progress = pct
+                r.progress, r.conversations_done, r.conversations_total = min(95, int(100 * done / total)), done, total
                 s.commit()
 
     with SessionLocal() as db:
@@ -518,10 +556,12 @@ def run_eval(run_id) -> None:
             def log(line: str) -> None:
                 hit = re.search(r"\[(\d+)/(\d+)\]", str(line))
                 if hit:
-                    set_progress(min(95, int(100 * int(hit.group(1)) / int(hit.group(2)))))
+                    set_progress(int(hit.group(1)), int(hit.group(2)))
 
             with tempfile.TemporaryDirectory() as tmp:
-                _, summary, _ = EvalRunner(suite, config_for(d), registry, out_root=tmp, index=index).run(log=log)
+                out, summary, _ = EvalRunner(suite, config_for(d), registry, out_root=tmp, index=index).run(log=log)
+                from delib.evals.runner import load_results
+                run.details = eval_details(load_results(out))
             ms = next(iter(summary["models"].values()))
             if ms.get("errors") and ms["errors"] >= ms.get("conversations", 0):
                 raise RuntimeError("Every evaluation conversation failed. Check the model API keys.")

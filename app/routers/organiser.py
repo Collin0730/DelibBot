@@ -37,6 +37,8 @@ def find_or_create_person(db: Db, name: str, email: str) -> m.Person:
         person = m.Person(full_name=name.strip(), email=email)
         db.add(person)
         db.flush()
+    elif person.full_name != name.strip():
+        person.full_name = name.strip()  # the name the organiser just typed wins over an older one
     return person
 
 
@@ -153,7 +155,7 @@ def delete_deliberation(delib_id: str, actor: Actor = Depends(organiser_only), d
 async def upload_documents(delib_id: str, files: list[UploadFile] = File(...), actor: Actor = Depends(organiser_only), db: Db = Depends(get_db)):
     d = load_deliberation(db, delib_id, actor)
     existing = {x.file_name: x for x in d.documents}
-    added, skipped = [], []
+    added, replaced, unchanged, skipped = [], [], [], []
     for f in files:
         name = ingest.clean_name(f.filename)
         if name.startswith("."):
@@ -169,17 +171,20 @@ async def upload_documents(delib_id: str, files: list[UploadFile] = File(...), a
             continue
         if name in existing:
             if existing[name].sha256 == doc.sha256:
+                unchanged.append(name)
                 continue
             db.delete(existing[name])
             db.flush()
+            replaced.append(name)
         doc.deliberation_id = d.id
         db.add(doc)
         db.flush()
         existing[name] = doc
-        added.append(name)
+        if name not in replaced:
+            added.append(name)
     db.commit()
     db.refresh(d)
-    return {"added": added, "skipped": skipped, "deliberation": serialize.workspace(d, db, actor)}
+    return {"added": added, "replaced": replaced, "unchanged": unchanged, "skipped": skipped, "deliberation": serialize.workspace(d, db, actor)}
 
 
 @router.delete("/documents/{doc_id}")
@@ -201,12 +206,22 @@ def start_eval(delib_id: str, actor: Actor = Depends(organiser_only), db: Db = D
     run = serialize.latest_eval(d)
     if run and run.status == "running":
         raise HTTPException(409, "An evaluation is already running.")
-    run = m.EvalRun(deliberation_id=d.id, coach_model=ai.profile_for("coach").model, judge_model=ai.profile_for("judge").model, prompt_version=ai.prompt_version(), document_count=len(d.documents))
+    run = m.EvalRun(deliberation_id=d.id, coach_model=ai.profile_for("coach").model, judge_model=ai.profile_for("judge").model, prompt_version=ai.prompt_version(), document_count=len(d.documents),
+                    conversations_total=len(settings.EVAL_PERSONAS) * len(settings.EVAL_SCENARIOS))
     db.add(run)
     db.commit()
     db.refresh(d)
     jobs.submit(ai._safe, ai.run_eval, run.id)
     return serialize.workspace(d, db, actor)
+
+
+@router.get("/eval-runs/{run_id}/details")
+def eval_details(run_id: str, actor: Actor = Depends(organiser_only), db: Db = Depends(get_db)):
+    """Why the scores are what they are: each simulated conversation with the judge's reasons."""
+    run = db.get(m.EvalRun, run_id)
+    if not run:
+        raise HTTPException(404, "Evaluation not found.")
+    return run.details or {"conversations": []}
 
 
 # ---------------------------------------------------------------- options (seeded concepts)
@@ -455,6 +470,11 @@ def remove_moderator(moderator_id: str, actor: Actor = Depends(organiser_only), 
 def bootstrap_admin(db: Db) -> None:
     """Create the first organiser from ADMIN_EMAIL and ADMIN_PASSWORD if none exists."""
     if db.scalar(select(m.Organiser.id).limit(1)):
+        # ADMIN_NAME, when set, keeps the first organiser's display name in step.
+        person = db.scalar(select(m.Person).where(m.Person.email == settings.ADMIN_EMAIL))
+        if person and settings.ADMIN_NAME_SET and person.full_name != settings.ADMIN_NAME:
+            person.full_name = settings.ADMIN_NAME
+            db.commit()
         return
     person = db.scalar(select(m.Person).where(m.Person.email == settings.ADMIN_EMAIL)) or m.Person(full_name=settings.ADMIN_NAME, email=settings.ADMIN_EMAIL)
     db.add(person)

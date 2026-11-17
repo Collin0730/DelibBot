@@ -55,11 +55,20 @@ def eval_stale(d: m.Deliberation, run: m.EvalRun | None) -> bool:
     return run.document_count != len(d.documents) or any(doc.uploaded_at > run.started_at for doc in d.documents)
 
 
-def eval_json(d: m.Deliberation) -> dict | None:
+def eval_json(d: m.Deliberation, db: Db | None = None) -> dict | None:
     run = latest_eval(d)
     if not run:
         return None
+    timing = {}
+    if run.status == "running" and db is not None:
+        elapsed = (m.now() - run.started_at).total_seconds()
+        done, total = run.conversations_done, run.conversations_total
+        estimate = ai.eval_estimate_s(db, run)
+        # Once a few conversations are back, the observed pace beats the estimate.
+        remaining = elapsed * (total - done) / done if total and done >= max(2, total // 4) else estimate - elapsed
+        timing = {"elapsed_s": int(elapsed), "estimate_s": estimate, "remaining_s": int(remaining)}
     return {
+        **timing, "started_at": iso(run.started_at), "conversations_done": run.conversations_done, "conversations_total": run.conversations_total,
         "id": str(run.id), "status": run.status, "progress": run.progress, "health": float(run.health_score) if run.health_score is not None else None,
         "stale": eval_stale(d, run), "error": run.error, "coach_model": run.coach_model, "judge_model": run.judge_model, "prompt_version": run.prompt_version,
         "cost_usd": float(run.cost_usd) if run.cost_usd is not None else None, "finished_at": iso(run.finished_at),
@@ -77,7 +86,7 @@ def workspace(d: m.Deliberation, db: Db, actor: Actor) -> dict:
     out = tile(d, db)
     out.update({
         "documents": [{"id": str(x.id), "file_name": x.file_name, "ext": x.file_ext, "chars": x.char_count, "indexed": bool(x.indexed_at)} for x in d.documents],
-        "eval": eval_json(d),
+        "eval": eval_json(d, db),
         "options": [{"id": str(c.id), "label": c.label, "seeded": c.seeded} for c in d.concepts if c.kind == "option" and c.status == "confirmed"],
         "participants": [
             {

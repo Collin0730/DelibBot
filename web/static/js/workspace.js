@@ -1,5 +1,5 @@
 // The organiser's workspace for one deliberation: details, materials, participants, schedule, session, debrief.
-import { html, useState, useEffect, useRef, api, get, post, Link, useLoad, attempt, toast, StageBadge, stageIndex, fmtDate, Avatar, Field, Loading, copyText, absolute } from './lib.js';
+import { html, useState, useEffect, useRef, api, get, post, upload as sendFiles, Link, useLoad, attempt, toast, StageBadge, stageIndex, fmtDate, Avatar, Field, Loading, copyText, absolute } from './lib.js';
 import { Shell } from './organiser.js';
 
 const STEPS = [['details', 'Details'], ['materials', 'Materials'], ['participants', 'Participants'], ['schedule', 'Schedule'], ['session', 'Session'], ['debrief', 'Debrief']];
@@ -79,19 +79,33 @@ const pct = (x) => Math.round(x * 100) + '%';
 const size = (n) => n < 1000 ? `${n} characters` : `${Math.round(n / 1000)}k characters`;
 const fmtMetric = (m, v) => m.metric.endsWith('_rate') ? (v * 100).toFixed(1) + '%' : Number(v).toFixed(2);
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+function wait(s) {
+  if (s <= 0) return 'Taking longer than estimated. Still working.';
+  if (s < 45) return 'Less than a minute left';
+  const m = Math.round(s / 60);
+  return `About ${plural(Math.max(1, m), 'minute')} left`;
+}
+
 function Materials({ d, act, setStep }) {
-  const [busy, setBusy] = useState(false);
-  const [skipped, setSkipped] = useState([]);
+  const [up, setUp] = useState(null);       // { count, sent } while an upload is in flight
+  const [result, setResult] = useState(null); // what the last upload did
+  const [why, setWhy] = useState(false);
+  const busy = !!up;
   const upload = async (e) => {
     const files = Array.from(e.target.files || []).filter(f => !/(^|\/)\./.test(f.webkitRelativePath || f.name));
     e.target.value = '';
-    if (!files.length) return;
-    setBusy(true);
+    if (!files.length) { setResult({ error: 'No readable files were selected.' }); return; }
+    setResult(null);
+    setUp({ count: files.length, sent: 0 });
     const fd = new FormData();
     files.forEach(f => fd.append('files', f, f.name));
-    const out = await act(() => post(`/deliberations/${d.id}/documents`, fd));
-    setBusy(false);
-    if (out) { setSkipped(out.skipped); toast(`${out.added.length} document${out.added.length === 1 ? '' : 's'} added${out.skipped.length ? `, ${out.skipped.length} skipped` : ''}.`); }
+    try {
+      const out = await sendFiles(`/deliberations/${d.id}/documents`, fd, (sent) => setUp({ count: files.length, sent }));
+      await act(() => out);
+      setResult(out);
+    } catch (err) { setResult({ error: err.message }); }
+    setUp(null);
   };
   const ev = d.eval;
   const running = ev && ev.status === 'running';
@@ -99,14 +113,24 @@ function Materials({ d, act, setStep }) {
   const below = done ? ev.metrics.filter(m => m.attainment < 1) : [];
   const ring = done ? (ev.health >= 90 ? '#2D7A4F' : ev.health >= 75 ? '#C98A2E' : '#B3412F') : '#C9CBC4';
   const mock = !d.models.coach.live;
-  const run = () => act(() => post(`/deliberations/${d.id}/eval`));
-  return html`<div class="split">
-    <div class="card main"><div class="card-head"><div><h2>Materials</h2><div class="small muted">${d.documents.length ? `${d.documents.length} document${d.documents.length === 1 ? '' : 's'} uploaded` : 'Nothing uploaded yet'}. PDF, Word, text, Markdown, HTML and captions.</div></div>
+  const run = () => { setWhy(false); return act(() => post(`/deliberations/${d.id}/eval`)); };
+  const r = result;
+  return html`<div class="col" style="gap:18px"><div class="split">
+    <div class="card main"><div class="card-head"><div><h2>Materials</h2><div class="small muted">${d.documents.length ? `${plural(d.documents.length, 'document')} uploaded` : 'Nothing uploaded yet'}. PDF, Word, text, Markdown, HTML and captions.</div></div>
       <div class="row">
-        <label class="btn">${busy ? 'Uploading.' : 'Upload a folder'}<input class="sr" type="file" webkitdirectory="true" multiple onChange=${upload} disabled=${busy} /></label>
-        <label class="btn">Upload files<input class="sr" type="file" multiple accept=".pdf,.docx,.txt,.md,.html,.htm,.vtt,.srt" onChange=${upload} disabled=${busy} /></label>
+        <label class="btn" aria-disabled=${busy}>Upload a folder<input class="sr" type="file" webkitdirectory="true" multiple onChange=${upload} disabled=${busy} /></label>
+        <label class="btn" aria-disabled=${busy}>Upload files<input class="sr" type="file" multiple accept=".pdf,.docx,.txt,.md,.html,.htm,.vtt,.srt" onChange=${upload} disabled=${busy} /></label>
       </div></div>
-      ${skipped.length > 0 && html`<div class="notice warn" style="margin:12px 20px 0"><b>Skipped:</b><ul style="margin:4px 0 0;padding-left:18px">${skipped.map(s => html`<li>${s.reason}</li>`)}</ul></div>`}
+      ${up && html`<div class="notice small" role="status" style="margin:12px 20px 0">
+        <div class="row" style="justify-content:space-between"><b>${up.sent < 1 ? `Uploading ${plural(up.count, 'file')}` : `Reading and indexing ${plural(up.count, 'file')}`}</b><span>${up.sent < 1 ? Math.round(up.sent * 100) + '%' : 'Large PDFs can take a minute'}</span></div>
+        <div class=${'bar' + (up.sent < 1 ? '' : ' busy')} style="margin-top:8px"><i style=${`width:${up.sent < 1 ? Math.round(up.sent * 100) : 100}%`}></i></div></div>`}
+      ${r && r.error && html`<div class="notice err small" role="alert" style="margin:12px 20px 0"><b>Upload failed.</b> ${r.error}</div>`}
+      ${r && !r.error && html`<div class=${'notice small' + (r.skipped.length ? ' warn' : ' ok')} role="status" style="margin:12px 20px 0">
+        <div class="row" style="justify-content:space-between;align-items:flex-start"><div>
+          <b>${[r.added.length && `${plural(r.added.length, 'document')} added`, r.replaced.length && `${r.replaced.length} replaced with a newer version`, r.unchanged.length && `${r.unchanged.length} already uploaded and unchanged`, r.skipped.length && `${r.skipped.length} skipped`].filter(Boolean).join(', ') || 'Nothing to add'}.</b>
+          ${(r.added.length > 0 || r.replaced.length > 0) && html`<div>Added: ${r.added.concat(r.replaced).join(', ')}</div>`}
+          ${r.skipped.length > 0 && html`<ul style="margin:4px 0 0;padding-left:18px">${r.skipped.map(x => html`<li>${x.reason.startsWith(x.file_name) ? x.reason : x.file_name + ": " + x.reason}</li>`)}</ul>`}
+        </div><button class="btn sm" onClick=${() => setResult(null)}>Dismiss</button></div></div>`}
       ${!d.documents.length && html`<div class="muted" style="padding:32px 20px;text-align:center">No documents yet. Upload the briefings, transcripts or readings participants were given.</div>`}
       <ul class="plain rows" style="max-height:440px;overflow-y:auto">${d.documents.map(f => html`<li key=${f.id}>
         <span class="ext">${f.ext || 'file'}</span><span class="grow" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${f.file_name}</span>
@@ -116,9 +140,12 @@ function Materials({ d, act, setStep }) {
     <aside class="card pad col side"><h2 style="font-size:18px">Partner readiness</h2>
       ${mock && html`<div class="notice warn small">No model API key is set, so the partner and the evaluation run on the built-in mock. Scores here are placeholders until you add a key.</div>`}
       ${!ev && html`<p class="small">Run the evaluation suite against these documents before inviting anyone. It checks that the partner stays neutral, grounded and non-steering.</p>
+        <p class="small muted">${mock ? 'On the mock this takes a few seconds.' : 'With a live model this usually takes 5 to 10 minutes. You can leave this page and come back.'}</p>
         <button class="btn primary" disabled=${!d.documents.length} onClick=${run}>Build partner and run evaluation</button>`}
-      ${running && html`<div class="row small muted" style="justify-content:space-between"><span>Running simulated conversations and judging them.</span><span>${ev.progress}%</span></div>
-        <div class="bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow=${ev.progress}><i style=${`width:${ev.progress}%`}></i></div>`}
+      ${running && html`<div class="row small" style="justify-content:space-between"><b>${wait(ev.remaining_s)}</b><span class="muted">${ev.progress}%</span></div>
+        <div class=${'bar' + (ev.conversations_done ? '' : ' busy')} role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow=${ev.progress}><i style=${`width:${ev.conversations_done ? ev.progress : 100}%`}></i></div>
+        <div class="small muted">${ev.conversations_done} of ${ev.conversations_total} simulated conversations finished and judged. Running for ${ev.elapsed_s < 60 ? 'under a minute' : plural(Math.floor(ev.elapsed_s / 60), 'minute')}${ev.estimate_s >= 60 ? `, usually about ${plural(Math.round(ev.estimate_s / 60), 'minute')} in total` : ''}.</div>
+        <div class="tiny muted">The bar moves each time a whole conversation finishes, so it can sit still for a minute or two. You can leave this page and come back.</div>`}
       ${ev && ev.status === 'failed' && html`<div class="notice err small" role="alert">The evaluation failed. ${ev.error}</div><button class="btn primary" onClick=${run}>Run it again</button>`}
       ${done && html`
         ${ev.stale && html`<div class="notice warn small">Documents changed since this evaluation. Re-run it so the score reflects the current materials.</div>`}
@@ -128,8 +155,68 @@ function Materials({ d, act, setStep }) {
         <table class="grid"><thead><tr><th>Metric</th><th>Result</th><th>Goal</th><th>Attained</th></tr></thead><tbody>
           ${ev.metrics.map(m => html`<tr><td>${m.label}</td><td>${fmtMetric(m, m.result)}</td><td>${m.higher_is_better ? '≥ ' : '≤ '}${fmtMetric(m, m.goal)}</td><td style=${m.attainment < 1 ? 'color:var(--red);font-weight:600' : ''}>${pct(m.attainment)}</td></tr>`)}</tbody></table>
         <p class="tiny muted">Coach ${ev.coach_model}, judge ${ev.judge_model}, prompt ${ev.prompt_version}${ev.cost_usd ? `, cost $${ev.cost_usd.toFixed(2)}` : ''}.</p>
-        <div class="row"><button class="btn sm" onClick=${run}>Re-run evaluation</button>${d.stage === 'none' && html`<button class="btn primary" onClick=${() => setStep('participants')}>Next: participants</button>`}</div>`}
-    </aside></div>`;
+        <div class="row"><button class="btn sm" onClick=${() => setWhy(!why)} aria-expanded=${why}>${why ? 'Hide the reasons' : 'See why'}</button><button class="btn sm" onClick=${run}>Re-run evaluation</button>${d.stage === 'none' && html`<button class="btn primary" onClick=${() => setStep('participants')}>Next: participants</button>`}</div>`}
+    </aside></div>
+    ${done && why && html`<${EvalWhy} ev=${ev} key=${ev.id} />`}</div>`;
+}
+
+// ---- why the scores are what they are: the weakest conversations per metric, with the judge's reasons
+const FLAG_FOR = { stance_leak_rate: 'stance_leak', invalid_citation_rate: 'invalid_citation' };
+function evidence(metric, convs) {
+  const out = [];
+  for (const c of convs) {
+    if (metric.metric === 'steering_conversation_rate') {
+      if (c.steering_turns.length) out.push({ c, turns: c.steering_turns, score: null, reason: `The judge marked turn ${c.steering_turns.join(', ')} as steering the participant.` });
+    } else if (FLAG_FOR[metric.metric]) {
+      const flag = FLAG_FOR[metric.metric];
+      const turns = c.turns.map((t, i) => t.flags.includes(flag) ? i + 1 : 0).filter(Boolean);
+      const hits = c.turns.flatMap(t => flag === 'stance_leak' ? t.stance_leaks : t.invalid_citations);
+      if (turns.length) out.push({ c, turns, score: null, reason: flag === 'stance_leak' ? `The partner used opinion wording: "${hits.join('", "')}".` : `The partner cited a source it was not given: ${hits.join(', ')}.` });
+    } else {
+      const s = c.scores[metric.metric];
+      if (s && s.score > 0 && s.score < 5) out.push({ c, turns: s.evidence_turns || [], score: s.score, reason: s.rationale });
+    }
+  }
+  return out.sort((a, b) => (a.score || 0) - (b.score || 0));
+}
+const VERDICT = { good: ['Good', 'green'], minor_issue: ['Minor issue', 'amber'], problem: ['Problem', 'red'], not_reviewed: ['Not reviewed', ''] };
+
+function EvalWhy({ ev }) {
+  const { data, error } = useLoad(() => get(`/eval-runs/${ev.id}/details`), [ev.id]);
+  const order = ev.metrics.slice().sort((a, b) => a.attainment - b.attainment);
+  const [sel, setSel] = useState(order[0] ? order[0].metric : null);
+  const [open, setOpen] = useState(null);
+  if (!data) return html`<div class="card pad"><${Loading} error=${error} /></div>`;
+  const convs = data.conversations || [];
+  if (!convs.length) return html`<div class="card pad"><h2 style="font-size:18px">Why these scores</h2><p class="small muted">This evaluation ran before reasons were recorded. Re-run it to see them.</p></div>`;
+  const metric = ev.metrics.find(m => m.metric === sel) || order[0];
+  const rows = evidence(metric, convs);
+  const failed = convs.filter(c => c.error);
+  return html`<div class="card"><div class="card-head"><div><h2 style="font-size:18px">Why these scores</h2>
+      <div class="small muted">${plural(convs.length, 'simulated conversation')} were scored by the judge model. Pick a metric to see the conversations that pulled it down, weakest first.</div></div></div>
+    <div class="row" style="padding:12px 20px 0;gap:6px;flex-wrap:wrap">${order.map(m => html`
+      <button class=${'btn sm' + (m.metric === metric.metric ? ' primary' : '')} aria-pressed=${m.metric === metric.metric} onClick=${() => { setSel(m.metric); setOpen(null); }}>${m.label} <span style=${m.attainment < 1 && m.metric !== metric.metric ? 'color:var(--red)' : ''}>${fmtMetric(m, m.result)}</span></button>`)}</div>
+    <div class="small" style="padding:12px 20px 0"><b>${metric.label}:</b> ${fmtMetric(metric, metric.result)} against a goal of ${metric.higher_is_better ? 'at least' : 'at most'} ${fmtMetric(metric, metric.goal)}.
+      ${rows.length ? ` ${plural(rows.length, 'conversation')} of ${convs.length} lost points.` : ' No conversation lost points on this metric.'}</div>
+    ${failed.length > 0 && html`<div class="notice warn small" style="margin:12px 20px 0">${plural(failed.length, 'conversation')} could not be scored and ${failed.length === 1 ? 'is' : 'are'} left out of the averages. First error: ${failed[0].error}</div>`}
+    <ul class="plain rows">${rows.map(({ c, turns, score, reason }) => html`<li key=${c.id} style="display:block">
+      <div class="row" style="justify-content:space-between;align-items:flex-start;flex-wrap:nowrap"><div>
+        <div><b>${c.persona}</b> <span class="muted small">${c.knowledge_level || ''} participant, scenario: ${String(c.scenario || '').replace(/_/g, ' ')}</span>
+          ${score !== null && html` <span class=${'badge ' + (score >= 4 ? 'amber' : 'red')}>${score} of 5</span>`}
+          ${turns.length > 0 && html` <span class="tiny muted">turn ${turns.join(', ')}</span>`}</div>
+        <div class="small" style="margin-top:4px">${reason || 'The judge gave no reason.'}</div></div>
+        <button class="btn sm" aria-expanded=${open === c.id} onClick=${() => setOpen(open === c.id ? null : c.id)}>${open === c.id ? 'Hide conversation' : 'Show conversation'}</button></div>
+      ${open === c.id && html`<div class="col" style="gap:10px;margin-top:12px">
+        ${c.brief && html`<div class="tiny muted"><b>What the simulated participant was told to do:</b> ${c.brief}</div>`}
+        ${c.turns.map((t, i) => { const v = VERDICT[t.verdict]; const hot = turns.includes(i + 1); return html`<div class="evturn" style=${hot ? 'border-left-color:var(--red)' : ''}>
+          <div class="tiny muted">Turn ${i + 1}${v ? html` <span class=${'badge ' + v[1]}>${v[0]}</span>` : ''}${t.issues.length ? ' ' + t.issues.map(x => x.replace(/_/g, ' ')).join(', ') : ''}</div>
+          <div class="small"><b>Participant:</b> ${t.participant}</div>
+          <div class="small" style="white-space:pre-wrap"><b>Partner:</b> ${t.coach}</div>
+          ${t.explanation && t.verdict !== 'good' && html`<div class="small" style="color:var(--amber)"><b>Judge:</b> ${t.explanation}</div>`}
+          ${t.better_response && html`<div class="small muted"><b>A better reply would be:</b> ${t.better_response}</div>`}</div>`; })}
+        ${c.notes && html`<div class="small muted"><b>Judge's overall note:</b> ${c.notes}</div>`}</div>`}
+    </li>`)}</ul>
+  </div>`;
 }
 
 const STATUS = { not_invited: ['Not invited', ''], invited: ['Invited', 'amber'], accepted: ['Accepted', 'green'], cancelled: ['Invite cancelled', 'red'], declined: ['Declined', 'red'] };

@@ -133,3 +133,11 @@ table.flow tr.proposed th.rowh { background: #FFFBF0; }
 .choice label { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border: 1px solid #C9CBC4; border-radius: 99px; cursor: pointer; font-size: 14px; background: #fff; font-weight: 400; }
 .choice input { accent-color: var(--blue); }
 .choice label:has(input:checked) { border-color: var(--blue); background: var(--blue-bg); font-weight: 600; }
+
+/* indeterminate bar, upload result, evaluation reasons */
+.bar.busy i { background: repeating-linear-gradient(110deg, #6B4FA0 0 14px, #8B73BC 14px 28px); background-size: 200% 100%; animation: barslide 1.2s linear infinite; }
+@keyframes barslide { from { background-position: 56px 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .bar.busy i { animation: none; } }
+.notice.ok { background: var(--green-bg, #E8F3EC); border-color: #B5D6C2; color: #1E5637; }
+label.btn[aria-disabled="true"] { opacity: .5; pointer-events: none; }
+.evturn { border-left: 3px solid var(--line2); padding: 2px 0 2px 12px; display: flex; flex-direction: column; gap: 4px; }

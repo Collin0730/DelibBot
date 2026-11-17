@@ -144,6 +144,9 @@ class EvalRun(Base):
     status: Mapped[str] = mapped_column(String(12), default="running")  # running | passed | below_goal | failed
     progress: Mapped[int] = mapped_column(Integer, default=0)
     document_count: Mapped[int] = mapped_column(Integer, default=0)
+    conversations_total: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    conversations_done: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    details: Mapped[dict | None] = mapped_column(JSONB, deferred=True)  # per-conversation scores, reasons and transcripts
     cost_usd: Mapped[float | None] = mapped_column(Numeric(10, 4))
     error: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime] = ts(False, now)

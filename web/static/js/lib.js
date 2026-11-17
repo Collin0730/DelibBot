@@ -34,6 +34,26 @@ export async function api(method, path, body) {
   }
   return data;
 }
+// POST a form with upload progress (fetch cannot report it). onProgress gets 0..1 as bytes leave the browser.
+export function upload(path, formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const s = scope();
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api' + path);
+    if (s.token) xhr.setRequestHeader('Authorization', 'Bearer ' + s.token);
+    xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total); };
+    xhr.upload.onload = () => onProgress && onProgress(1);
+    xhr.onerror = () => reject(new Error('The upload did not reach the server. Check your connection and try again.'));
+    xhr.onload = () => {
+      let data = null;
+      try { data = JSON.parse(xhr.responseText); } catch (e) { /* not JSON */ }
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(data);
+      const detail = data && data.detail;
+      reject(new Error(typeof detail === 'string' ? detail : xhr.status === 413 ? 'That upload is too large for the server.' : 'The upload failed (' + xhr.status + ').'));
+    };
+    xhr.send(formData);
+  });
+}
 export const get = (p) => api('GET', p);
 export const post = (p, b) => api('POST', p, b === undefined ? {} : b);
 
