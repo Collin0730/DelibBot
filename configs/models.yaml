@@ -1,0 +1,42 @@
+# Which model plays which role. For each role, list profiles in order of
+# preference: the first one whose API key is set in the environment is used.
+# If none has a key, the role runs on the built-in mock so the site still works.
+#
+# Pricing is USD per million tokens and drives the cost figure on evaluation
+# runs. Model IDs and prices change often: check the provider's pricing page.
+
+roles:
+  coach: [claude-sonnet, openai-luna]         # the participant-facing partner
+  tagger: [claude-haiku, openai-luna]         # turns chat messages into flow entries
+  standin: [claude-haiku, openai-luna]        # AI stand-in participants
+  participant_sim: [claude-haiku, openai-luna] # synthetic participants in evaluations
+  judge: [openai-luna, claude-sonnet]         # scores evaluation transcripts
+
+profiles:
+  claude-sonnet:
+    provider: anthropic
+    model: claude-sonnet-5-5
+    api_key_env: ANTHROPIC_API_KEY
+    max_tokens: 1200
+    pricing: { input_per_mtok: 2.00, output_per_mtok: 10.00 }
+
+  claude-haiku:
+    provider: anthropic
+    model: claude-haiku-5-5
+    api_key_env: ANTHROPIC_API_KEY
+    max_tokens: 1000
+    pricing: { input_per_mtok: 0.10, output_per_mtok: 0.50 }
+
+  # GPT-5 and GPT-6 family models are reasoning models: they spend part of
+  # max_tokens on hidden reasoning, so the limit is higher.
+  openai-luna:
+    provider: openai
+    model: gpt-6-luna
+    api_key_env: OPENAI_API_KEY
+    max_tokens: 4000
+    extra: { reasoning_effort: low }
+    pricing: { input_per_mtok: 0.10, output_per_mtok: 0.50 }
+
+  mock:
+    provider: mock
+    model: mock-1
